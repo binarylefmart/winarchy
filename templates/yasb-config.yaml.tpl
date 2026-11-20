@@ -325,9 +325,9 @@ widgets:
       label: "<span></span>"
       class_name: "tool-widget"
       tooltip: true
-      tooltip_label: "Region capture"
+      tooltip_label: "Capture (Screenpresso)"
       callbacks:
-        on_left: "exec winarchy screenshot region"
+        on_left: "exec cmd.exe /c %USERPROFILE%\\.winarchy-perso\\screenpresso-capture.ahk"
         on_middle: "do_nothing"
         on_right: "do_nothing"
 
@@ -395,7 +395,7 @@ widgets:
     type: "yasb.grouper.GrouperWidget"
     options:
       class_name: "extras-grouper"
-      widgets: ["tool_region", "tool_record", "tool_stop", "tool_ocr", "tool_qr", "tool_color", "dnd", "brightness", "power_plan"]
+      widgets: ["tool_region", "tool_ocr", "tool_qr", "tool_color", "dnd", "brightness", "power_plan"]
       hide_empty: false
       collapse_options:
         enabled: false

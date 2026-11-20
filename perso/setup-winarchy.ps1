@@ -135,6 +135,32 @@ if (Get-Command claude -ErrorAction SilentlyContinue) {
     Ok "Lanceur Claude : $claudePs1"
 }
 
+# Bouton capture de la barre YASB -> Screenpresso (il n'a pas d'option de capture en ligne
+# de commande : on le démarre au besoin puis on envoie Impr. écran, son raccourci de capture).
+function Write-ScreenpressoLauncher {
+    $ahk = Join-Path $Perso 'screenpresso-capture.ahk'
+    New-Item -ItemType Directory -Force $Perso | Out-Null
+    Write-Utf8Bom $ahk @'
+#Requires AutoHotkey v2.0
+#SingleInstance Force
+; Lancé par le bouton capture de la barre YASB (setup-winarchy.ps1).
+exe := EnvGet('LOCALAPPDATA') '\Learnpulse\Screenpresso\Screenpresso.exe'
+if !ProcessExist('Screenpresso.exe') {
+    if !FileExist(exe) {
+        MsgBox 'Screenpresso introuvable : ' exe, 'Capture', 'Icon!'
+        ExitApp
+    }
+    Run '"' exe '"'
+    if !ProcessWait('Screenpresso.exe', 10)
+        ExitApp
+    Sleep 2500   ; le temps qu'il enregistre son raccourci Impr. écran
+}
+Sleep 150        ; laisse le clic sur la barre se terminer
+Send '{PrintScreen}'
+'@
+    Ok "Lanceur capture Screenpresso : $ahk"
+}
+
 # Les raccourcis Claude Desktop ouvrent la version Store (AppID Claude_pzs8sxrjxfjjc).
 function Test-ClaudeDesktop {
     if (Get-StartApps -ErrorAction SilentlyContinue | Where-Object { $_.Name -eq 'Claude' }) { Ok 'Claude Desktop installé' }
@@ -268,6 +294,7 @@ function Install-Raccourcis([string]$Root) {
     Write-Host '==> Installation des raccourcis perso'
     Copy-Profils
     Write-ClaudeLauncher
+    Write-ScreenpressoLauncher
     Test-ClaudeDesktop
     $shell = if (Get-Command pwsh -ErrorAction SilentlyContinue) { 'pwsh' } else { 'powershell' }
 
@@ -820,6 +847,10 @@ function Edit-ModeleKomorebi([string]$t) {
 function Edit-ModeleYasb([string]$t) {
     $t = [regex]::Replace($t, '(collapse_options:\s*\r?\n\s*enabled:\s*)true', '${1}false')
     $t = $t.Replace('widgets: ["claude_usage", "codex_usage"]', 'widgets: ["claude_usage"]')
+    # Bouton capture -> Screenpresso ; pas de boutons d'enregistrement vidéo (ni son « stop »).
+    $t = $t.Replace('tooltip_label: "Region capture"', 'tooltip_label: "Capture (Screenpresso)"')
+    $t = $t.Replace('on_left: "exec winarchy screenshot region"', 'on_left: "exec cmd.exe /c %USERPROFILE%\\.winarchy-perso\\screenpresso-capture.ahk"')
+    $t = $t.Replace('"tool_record", "tool_stop", ', '')
     # Indicateur des fenêtres ouvertes (icônes cliquables) après l'icône de layout.
     if ($t -notmatch 'yasb\.taskbar\.TaskbarWidget') {
         if ($t -notmatch '"komorebi_active_layout", ' -or $t -notmatch '(?m)^  komorebi_workspaces:') { throw 'ancre taskbar absente' }

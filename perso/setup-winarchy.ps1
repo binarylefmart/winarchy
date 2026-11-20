@@ -1,0 +1,957 @@
+﻿<#
+  Raccourcis et réglages perso Omarchy -> Winarchy (komorebi + YASB + AutoHotkey v2).
+
+  Winarchy vient de ton fork github.com/binarylefmart/winarchy (C:\winarchy), qui suit le
+  projet d'origine github.com/guidonaselli/winarchy (remote « upstream »). Ce script est
+  versionné dans le fork (perso\setup-winarchy.ps1) ; la copie sur kDrive n'est qu'un
+  lanceur qui fournit aussi le dossier profils\ (réglages Claude / gh, privés).
+
+  À lancer dans un PowerShell normal (pas administrateur) :
+      powershell -ExecutionPolicy Bypass -File "setup-winarchy.ps1"
+  Tout est automatique :
+   - Winarchy absent : installation depuis le fork (boot.ps1), activée au démarrage de session ;
+   - Winarchy présent : remotes vérifiés, mises à jour du projet d'origine fusionnées avec
+     tes fix et réglages (perso\Sync-Upstream.ps1), migration, push sur le fork ;
+   - puis réglages et raccourcis ci-dessous appliqués, et le résultat poussé sur le fork.
+  Utilise ce script À LA PLACE de « winarchy update --self » (fast-forward seulement : il
+  échoue dès qu'il y a des commits perso).
+  Sans la mise à jour de Winarchy :
+      powershell -ExecutionPolicy Bypass -File "setup-winarchy.ps1" -SansMiseAJour
+  Pour tout retirer :
+      powershell -ExecutionPolicy Bypass -File "setup-winarchy.ps1" -Desinstaller
+
+  Relançable sans risque : il remplace ses propres ajouts.
+
+  Réglages dans les modèles de Winarchy (repatchés à chaque lancement) :
+        Fenêtre seule en pleine largeur par défaut (Super+F la centre)
+        Barre YASB : groupes toujours dépliés, sans compteur Codex
+        Barre YASB : icônes de la zone de notification renvoyées à chaque redémarrage de YASB
+
+  Raccourcis (ils passent devant ceux de Winarchy) :
+        Super+Backspace            Claude Code (Foxis)
+        Super+Shift+Backspace      Claude Code (perso)
+        Super+Ctrl+Shift+Backspace Claude Desktop (ouvre / affiche / replie ; Super+Shift+A ne fait plus rien)
+        Super+Ctrl+Alt+Shift+Entrée  Claude Desktop perso (2e instance, compte perso ; ouvre / affiche / replie)
+        Super+A / Super+Alt+Tab    Exposé (Vue des tâches de Windows)
+        Super+O                    Outlook classique (Obsidian n'a plus de raccourci ; Super+Shift+O ne fait plus rien)
+        Super+M                    Deezer
+        Super+Y / X / C / G        Supprimés (applis web YouTube, X, Calendar, WhatsApp de Winarchy)
+        Super+Shift+N              Bloc-notes
+        Super+R                    Exécuter (Run)
+        Super+I                    Paramètres Windows
+        Super (seul)               Lanceur d'applis Winarchy (à la place du menu Démarrer)
+        Super+Espace               Menu Démarrer de Windows
+        Super+Q                    Menu Winarchy (reste aussi sur Super+Alt+Espace)
+        Super+Ctrl+Alt+flèches     Fenêtre -> écran voisin
+        Super+F                    Plein : fenêtre seule = pleine largeur (défaut) <-> centrée ;
+                                   plusieurs fenêtres = monocle (l'active remplit le bureau)
+        Super+Shift+T              Tout retiler : flottantes remises en tuiles, monocle quitté,
+                                   tuiles à parts égales (bureau actif). Thème suivant : menu Super+Q
+        Super+Ctrl+R               Retile simple (remet les fenêtres mal redimensionnées dans leur tuile)
+        Super+Alt+flèches          Caler la fenêtre : moitiés, coins en combinant (← puis ↑ = haut gauche).
+                                   Elle passe en flottant ; Super+T la remet dans le tiling.
+        Super+Z                    Mode redimensionnement (flèches / hjkl, Maj = fin,
+                                   Échap ou Entrée pour sortir)
+        Super+S                    Réduire la fenêtre active (à chaque appui)
+        Super+Shift+S              Ramener toutes les fenêtres réduites par Super+S
+        Super+P                    Projeter, le menu de Windows (Winarchy y mettait la pause du tiling)
+  Et le focus suit la souris (survol = fenêtre active, comme sous Omarchy).
+#>
+param(
+    [switch]$Desinstaller,
+    [switch]$SansMiseAJour,
+    # Dossier des réglages Claude / gh à copier dans le profil (passé par le lanceur kDrive).
+    [string]$Profils = (Join-Path $PSScriptRoot 'profils')
+)
+$ErrorActionPreference = 'Stop'
+
+$Fork     = 'binarylefmart/winarchy'
+$Amont    = 'guidonaselli/winarchy'
+$Perso    = Join-Path $env:USERPROFILE '.winarchy-perso'
+$AhkDebut = '; >>> raccourcis-perso (setup-winarchy.ps1) >>>'
+$AhkFin   = '; <<< raccourcis-perso <<<'
+# Modèles suivis par git que ce script patche (et que Sync-Upstream.ps1 sait reprendre).
+$ModelesPatches = @('templates\komorebi.json.tpl', 'templates\yasb-config.yaml.tpl')
+
+function Ok([string]$m)   { Write-Host "  OK  $m" -ForegroundColor Green }
+function Info([string]$m) { Write-Host "  --  $m" -ForegroundColor DarkGray }
+function Warn([string]$m) { Write-Host "  !!  $m" -ForegroundColor Yellow }
+function Err([string]$m)  { Write-Host "  XX  $m" -ForegroundColor Red }
+
+function Write-Utf8Bom([string]$path, [string]$text) {
+    $text = $text -replace "`r?`n", "`r`n"
+    [IO.File]::WriteAllText($path, $text, (New-Object Text.UTF8Encoding $true))
+}
+
+function Assert-PasAdmin {
+    $id = [Security.Principal.WindowsIdentity]::GetCurrent()
+    if ((New-Object Security.Principal.WindowsPrincipal $id).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+        Err 'PowerShell est lancé en administrateur. Relance ce script dans un PowerShell normal.'
+        exit 1
+    }
+    Ok "Session normale ($($id.Name))"
+}
+
+function Find-AhkV2 {
+    @(
+        (Join-Path $env:ProgramFiles 'AutoHotkey\v2\AutoHotkey64.exe'),
+        (Join-Path $env:LOCALAPPDATA 'Programs\AutoHotkey\v2\AutoHotkey64.exe')
+    ) | Where-Object { Test-Path $_ } | Select-Object -First 1
+}
+
+# Réglages Claude / gh (dossier profils\), sans jetons. Jamais écrasés s'ils existent.
+function Copy-Profils {
+    if (-not (Test-Path $Profils)) { Info "Pas de dossier profils ($Profils) : réglages Claude / gh non copiés"; return }
+    Get-ChildItem $Profils -Recurse -File -Force | ForEach-Object {
+        $rel  = $_.FullName.Substring($Profils.Length).TrimStart('\', '/')
+        $dest = Join-Path $env:USERPROFILE $rel
+        if (Test-Path $dest) { Info "Déjà présent, gardé : $dest" }
+        else {
+            New-Item -ItemType Directory -Force (Split-Path $dest) | Out-Null
+            Copy-Item $_.FullName $dest
+            Ok "Réglage copié : $dest"
+        }
+    }
+}
+
+function Write-ClaudeLauncher {
+    $claudePs1 = Join-Path $Perso 'claude.ps1'
+    New-Item -ItemType Directory -Force $Perso | Out-Null
+    New-Item -ItemType Directory -Force (Join-Path $env:USERPROFILE 'Work') | Out-Null
+    Write-Utf8Bom $claudePs1 @'
+# Lance Claude Code dans ~\Work avec le compte demandé (foxis ou perso).
+param([ValidateSet('foxis', 'perso')][string]$Profil = 'perso')
+$env:CLAUDE_CONFIG_DIR = Join-Path $HOME ".claude-$Profil"
+$env:GH_CONFIG_DIR     = Join-Path $HOME ".config\gh-$Profil"
+Set-Location (Join-Path $HOME 'Work')
+$Host.UI.RawUI.WindowTitle = "Claude ($Profil)"
+if (Get-Command claude -ErrorAction SilentlyContinue) {
+    claude --permission-mode auto
+} else {
+    Write-Warning "Claude Code n'est pas installé (commande « claude » introuvable)."
+}
+'@
+    Ok "Lanceur Claude : $claudePs1"
+}
+
+# Les raccourcis Claude Desktop ouvrent la version Store (AppID Claude_pzs8sxrjxfjjc).
+function Test-ClaudeDesktop {
+    if (Get-StartApps -ErrorAction SilentlyContinue | Where-Object { $_.Name -eq 'Claude' }) { Ok 'Claude Desktop installé' }
+    else { Warn 'Claude Desktop introuvable : installe-le (Microsoft Store) pour les raccourcis Claude Desktop.' }
+}
+
+# Focus qui suit la souris : réglage natif de Windows (« activer une fenêtre en la
+# survolant »), enregistré dans le profil. Indépendant de Winarchy : ni un changement de
+# thème ni un rechargement ne l'effacent.
+function Set-Survol([bool]$actif) {
+    if (-not ('PersoWinarchy.Spi' -as [type])) {
+        Add-Type -Namespace PersoWinarchy -Name Spi -MemberDefinition '[DllImport("user32.dll")] public static extern bool SystemParametersInfo(uint a, uint b, IntPtr v, uint c);'
+    }
+    $enregistrer = 3   # SPIF_UPDATEINIFILE | SPIF_SENDCHANGE
+    [void][PersoWinarchy.Spi]::SystemParametersInfo(0x1001, 0, [IntPtr][int]$actif, $enregistrer)   # ACTIVEWINDOWTRACKING
+    if ($actif) {
+        [void][PersoWinarchy.Spi]::SystemParametersInfo(0x100D, 0, [IntPtr]1, $enregistrer)     # premier plan au survol
+        [void][PersoWinarchy.Spi]::SystemParametersInfo(0x2003, 0, [IntPtr]150, $enregistrer)   # après 150 ms
+        Ok 'Focus qui suit la souris activé (survol = fenêtre active)'
+    } else {
+        Ok 'Focus qui suit la souris désactivé'
+    }
+}
+
+function Find-WinarchyKomorebi {
+    $racines = @()
+    $cmd = Get-Command winarchy -ErrorAction SilentlyContinue
+    if ($cmd -and $cmd.Source) { $racines += (Split-Path (Split-Path $cmd.Source)) }
+    $racines += 'C:\winarchy'
+    foreach ($r in $racines) {
+        if (Test-Path (Join-Path $r 'config\ahk\winarchy.ahk')) { return $r }
+    }
+    return $null
+}
+
+# --- Raccourcis : bloc AutoHotkey dans config\ahk\user.ahk ------------------------
+
+# Bloc perso, quel que soit le nom du script entre parenthèses dans le marqueur : les blocs
+# posés sous l'ancien nom (installer-raccourcis-winarchy.ps1) sont aussi reconnus et remplacés.
+function Remove-BlocAhk([string]$text) {
+    $debut = [regex]::Escape($AhkDebut).Replace([regex]::Escape('(setup-winarchy.ps1)'), '\([^)]*\.ps1\)')
+    $motif = '(?s)(\r?\n)*' + $debut + '.*?' + [regex]::Escape($AhkFin) + '[^\r\n]*'
+    [regex]::Replace($text, $motif, '')
+}
+
+# Écrit user.ahk, le valide avec AutoHotkey, et revient en arrière si ça ne passe pas.
+function Save-UserAhk([string]$userAhk, [string]$mainAhk, [string]$ahkExe, [string]$text) {
+    $text = ($text -replace "`r?`n", "`r`n").TrimEnd() + "`r`n"
+    $avant = if (Test-Path $userAhk) { [IO.File]::ReadAllText($userAhk) } else { $null }
+    if ($null -ne $avant) { Copy-Item $userAhk "$userAhk.bak" -Force }
+    [IO.File]::WriteAllText($userAhk, $text, (New-Object Text.UTF8Encoding $false))
+    $sortie = & $ahkExe /ErrorStdOut /validate $mainAhk 2>&1 | Out-String
+    if ($LASTEXITCODE -ne 0 -or $sortie.Trim()) {
+        if ($null -ne $avant) { [IO.File]::WriteAllText($userAhk, $avant, (New-Object Text.UTF8Encoding $false)) }
+        else { Remove-Item $userAhk -Force }
+        Err "AutoHotkey refuse le résultat, user.ahk remis comme avant :`n$sortie"
+        exit 1
+    }
+    Ok "user.ahk à jour et validé par AutoHotkey (sauvegarde : $userAhk.bak)"
+}
+
+function Restart-WinarchyAhk([string]$mainAhk, [string]$ahkExe) {
+    Start-Process $ahkExe -ArgumentList '/restart', "`"$mainAhk`""
+    Start-Sleep -Seconds 2
+    $ok = Get-CimInstance Win32_Process -Filter "Name LIKE 'AutoHotkey%'" -ErrorAction SilentlyContinue |
+        Where-Object { $_.CommandLine -like '*winarchy.ahk*' }
+    if ($ok) { Ok 'winarchy.ahk relancé avec tes raccourcis' } else { Err 'winarchy.ahk ne tourne pas : lance « winarchy reload ».' }
+}
+
+function Install-Raccourcis([string]$Root) {
+    $MainAhk = Join-Path $Root 'config\ahk\winarchy.ahk'
+    $UserAhk = Join-Path $Root 'config\ahk\user.ahk'
+    $Komorebic = Join-Path $env:ProgramFiles 'komorebi\bin\komorebic.exe'
+    if (-not (Test-Path $Komorebic)) { $Komorebic = 'komorebic.exe' }
+
+    $ahkExe = Find-AhkV2
+    if (-not $ahkExe) { Err 'AutoHotkey v2 introuvable : « winarchy update --core » l''installe.'; exit 1 }
+    Ok "AutoHotkey v2 : $ahkExe"
+    if (-not (Select-String -Path $MainAhk -SimpleMatch 'user.ahk' -Quiet)) {
+        Err "$MainAhk n'inclut pas user.ahk : version de Winarchy inattendue, rien n'est modifié."
+        exit 1
+    }
+    Ok 'winarchy.ahk inclut user.ahk'
+
+    $delta = 50
+    if (Get-Process komorebi -ErrorAction SilentlyContinue) {
+        Ok 'komorebi tourne'
+        try {
+            $etat = & $Komorebic state | ConvertFrom-Json
+            if ($etat.resize_delta) { $delta = [int]$etat.resize_delta }
+            if ($etat.is_paused) {
+                & $Komorebic toggle-pause | Out-Null
+                Ok 'komorebi était en pause (plus aucune fenêtre tilée) : pause levée'
+            }
+        } catch { Warn "État de komorebi illisible : $($_.Exception.Message)" }
+    } else { Warn 'komorebi ne tourne pas : lance « winarchy reload ».' }
+
+    $texte = if (Test-Path $UserAhk) { [IO.File]::ReadAllText($UserAhk) } else { "; Surcharges perso de Winarchy (survivent aux mises a jour).`r`n" }
+    $texte = Remove-BlocAhk $texte
+    # Anciennes définitions écrites à la main hors du bloc, maintenant dans le bloc :
+    # Super+Shift+A (deux définitions = erreur AutoHotkey) et ToggleClaudeDesktop()
+    # (remplacée par PersoClaudeBascule).
+    $texte = [regex]::Replace($texte, '(?m)^#\+a::.*(\r?\n)?', '')
+    $texte = [regex]::Replace($texte, '(?ms)^ToggleClaudeDesktop\(\)\s*\{.*?^\}[^\r\n]*(\r?\n)?', '')
+
+    if ($Desinstaller) {
+        Write-Host '==> Désinstallation des raccourcis perso'
+        Save-UserAhk $UserAhk $MainAhk $ahkExe $texte
+        Restart-WinarchyAhk $MainAhk $ahkExe
+        Set-Survol $false
+        if (Test-Path $Perso) { Remove-Item $Perso -Recurse -Force; Ok "Supprimé : $Perso" }
+        return
+    }
+
+    Write-Host '==> Installation des raccourcis perso'
+    Copy-Profils
+    Write-ClaudeLauncher
+    Test-ClaudeDesktop
+    $shell = if (Get-Command pwsh -ErrorAction SilentlyContinue) { 'pwsh' } else { 'powershell' }
+
+    $bloc = @'
+; >>> raccourcis-perso (setup-winarchy.ps1) >>>
+; Bloc réécrit à chaque lancement de setup-winarchy.ps1 : modifie plutôt
+; le script, sinon tes changements sautent. Le #HotIf toujours vrai fait passer ces
+; raccourcis devant ceux de winarchy.ahk, qui inclut ce fichier à la fin.
+InstallMouseHook()
+#HotIf true
+; --- Perso : applis -----------------------------------------------------------
+#Backspace::PersoClaude('foxis')                  ; Claude Code (Foxis)
+#+Backspace::PersoClaude('perso')                 ; Claude Code (perso)
+#^+Backspace::PersoClaudeBascule()                ; Claude Desktop : ouvre / affiche / replie
+#+a::return                                       ; Supprimé (webapp claude.ai de Winarchy)
+#^!+Enter::PersoClaudePerso()                     ; Claude Desktop perso (2e instance, compte perso)
+#a::PersoExpose()                                 ; Exposé (Vue des tâches)
+#!Tab::PersoExpose()                              ; Exposé (Vue des tâches)
+#o::PersoOutlook()                                ; Outlook (remplace Obsidian de Winarchy)
+#+o::return                                       ; Supprimé (Outlook est passé sur Super+O)
+#m::PersoDeezer()                                 ; Deezer (remplace la musique de Winarchy)
+#y::return                                        ; Supprimés : applis web de Winarchy
+#x::return                                        ;   (YouTube, X, Google Calendar, WhatsApp)
+#c::return
+#g::return
+#+n::Run('notepad.exe')                           ; Bloc-notes
+#r::Run('explorer.exe shell:::{2559a1f3-21d7-11d4-bdaf-00c04f60b9f0}')   ; Exécuter
+#i::Run('ms-settings:')                           ; Paramètres Windows
+#Space::Send('^{Esc}')                            ; Menu Démarrer
+#q::ShowMainMenu()                                ; Menu Winarchy
+; Super seul = lanceur d'applis (Flow, l'ancien Super+Espace) au lieu du menu Démarrer.
+; « Seul » = aucune autre touche ni clic pendant l'appui, relâché en moins d'une
+; demi-seconde (Super+glisser, Super+chiffre, etc. n'ouvrent donc rien).
+~LWin::PersoSuper(true)
+LWin up::PersoSuper(false)
+; --- Perso : fenêtres ---------------------------------------------------------
+#^!Left::PersoKomorebic('cycle-move-to-monitor previous')   ; Fenêtre vers l'écran voisin
+#^!Up::PersoKomorebic('cycle-move-to-monitor previous')
+#^!Right::PersoKomorebic('cycle-move-to-monitor next')
+#^!Down::PersoKomorebic('cycle-move-to-monitor next')
+#f::PersoPlein()                                  ; Plein : seule = centrée <-> pleine largeur ; sinon monocle
+#+f::return                                       ; Supprimé (agrandissement Windows de Winarchy)
+#+t::PersoToutTiler()                             ; Tout le bureau en tiling, tuiles à parts égales (remplace « thème suivant »)
+#^r::PersoKomorebic('retile')                     ; Retile simple
+#^Space::return                                   ; Supprimé (fond d'écran suivant de Winarchy, reste dans le menu Super+Q)
+#!Left::PersoPlace('left')                        ; Caler : moitiés, puis coins en combinant
+#!Right::PersoPlace('right')
+#!Up::PersoPlace('up')
+#!Down::PersoPlace('down')
+#z::PersoResize()                                 ; Mode redimensionnement
+#s::PersoCache()                                  ; Réduire la fenêtre active
+#+s::PersoRameneTout()                            ; Ramener toutes les fenêtres cachées
+#p::Run('ms-settings-displays-topology:projection')   ; Projeter (menu Windows)
+#HotIf PersoResizeOn()
+Left::PersoResizePas('horizontal', 'decrease', 100)
+h::PersoResizePas('horizontal', 'decrease', 100)
+Right::PersoResizePas('horizontal', 'increase', 100)
+l::PersoResizePas('horizontal', 'increase', 100)
+Down::PersoResizePas('vertical', 'increase', 100)
+j::PersoResizePas('vertical', 'increase', 100)
+Up::PersoResizePas('vertical', 'decrease', 100)
+k::PersoResizePas('vertical', 'decrease', 100)
++Left::PersoResizePas('horizontal', 'decrease', 25)
++h::PersoResizePas('horizontal', 'decrease', 25)
++Right::PersoResizePas('horizontal', 'increase', 25)
++l::PersoResizePas('horizontal', 'increase', 25)
++Down::PersoResizePas('vertical', 'increase', 25)
++j::PersoResizePas('vertical', 'increase', 25)
++Up::PersoResizePas('vertical', 'decrease', 25)
++k::PersoResizePas('vertical', 'decrease', 25)
+Escape::PersoResizeFin()
+Enter::PersoResizeFin()
+#HotIf
+
+PersoSuper(bas) {
+    static depuis := 0
+    SetKeyDelay(-1, -1)
+    if bas {
+        Send('{Blind}{vkE8}')          ; masque Super seul : Windows n'ouvre pas Démarrer
+        if !depuis
+            depuis := A_TickCount
+        return
+    }
+    Send('{Blind}{vkE8}{LWin up}')
+    seul := (A_PriorKey = 'LWin' && A_TickCount - depuis < 500)
+    depuis := 0
+    if seul
+        ToggleFlow()
+}
+
+PersoKomorebic(cmd) {
+    global KomorebicExe
+    RunWait('"' KomorebicExe '" ' cmd, , 'Hide')
+}
+
+; État complet de komorebi (lève une erreur s'il est illisible). Le document HTML qui
+; fournit le parseur JSON est gardé : les objets rendus en dépendent.
+PersoEtat() {
+    global KomorebicExe
+    static doc := 0
+    if !doc {
+        doc := ComObject('htmlfile')
+        doc.write('<meta http-equiv="X-UA-Compatible" content="IE=edge">')
+    }
+    tmp := A_Temp '\winarchy-perso-state.json'
+    RunWait(A_ComSpec ' /c ""' KomorebicExe '" state > "' tmp '""', , 'Hide')
+    return doc.parentWindow.JSON.parse(FileRead(tmp))
+}
+
+; Barres, bureau et YASB : jamais déplacés ni réduits.
+PersoIgnoree(h) {
+    return WinGetClass('ahk_id ' h) ~= '^(Progman|WorkerW|Shell_TrayWnd|Shell_SecondaryTrayWnd)$'
+        || WinGetProcessName('ahk_id ' h) = 'yasb.exe'
+}
+
+; Super+F : une seule fenêtre en tuile -> bascule centrée / pleine largeur (bureau actif) ;
+; plusieurs -> monocle. Si le monocle est déjà actif, Super+F le quitte.
+PersoPlein() {
+    static coupe := Map()   ; bureaux dont Super+F a coupé le centrage pour le monocle
+    try {
+        state := PersoEtat()
+        im := state.monitors.focused
+        m := state.monitors.elements.%im%
+        iw := m.workspaces.focused
+        w := m.workspaces.elements.%iw%
+        cle := im '-' iw
+        ; komorebi compte un monocle comme « une fenêtre » : le centrage s'y appliquerait.
+        ; On le coupe en entrant en monocle et on le remet en sortant.
+        if IsObject(w.monocle_container) {
+            PersoKomorebic('toggle-monocle')
+            if (coupe.Has(cle) && !w.apply_window_based_work_area_offset)
+                PersoKomorebic('toggle-window-based-work-area-offset')
+            if coupe.Has(cle)
+                coupe.Delete(cle)
+            return
+        }
+        if (w.containers.elements.length <= 1)
+            return PersoKomorebic('toggle-window-based-work-area-offset')
+        if w.apply_window_based_work_area_offset {
+            PersoKomorebic('toggle-window-based-work-area-offset')
+            coupe[cle] := true
+        }
+    }
+    PersoKomorebic('toggle-monocle')
+}
+
+; Vraie fenêtre d'application : visible, non réduite, sur le bureau affiché (pas « cloaked »),
+; avec barre de titre, sans propriétaire, et pas une barre, un overlay ou le bureau.
+PersoFenetreApp(h) {
+    try {
+        if !DllCall('IsWindowVisible', 'Ptr', h) || DllCall('IsIconic', 'Ptr', h)
+            return false
+        if DllCall('GetWindow', 'Ptr', h, 'UInt', 4, 'Ptr')          ; GW_OWNER
+            return false
+        cloak := 0
+        DllCall('dwmapi\DwmGetWindowAttribute', 'Ptr', h, 'UInt', 14, 'Int*', &cloak, 'UInt', 4)
+        if cloak
+            return false
+        if (WinGetStyle(h) & 0xC00000) != 0xC00000                     ; WS_CAPTION
+            return false
+        if WinGetExStyle(h) & 0x8000080                                ; TOOLWINDOW / NOACTIVATE
+            return false
+        if WinGetTitle(h) = ''
+            return false
+        if WinGetClass(h) ~= '^(Progman|WorkerW|Shell_TrayWnd|Shell_SecondaryTrayWnd|Windows\.UI\.Core\.CoreWindow)$'
+            return false
+        if WinGetProcessName(h) ~= 'i)^(komorebi.*|yasb|Flow\.Launcher|AutoHotkey.*)\.exe$'
+            return false
+        return true
+    }
+    return false
+}
+
+; Super+Shift+T : remet tout le bureau actif en tiling. Les fenêtres flottantes (Super+Alt+
+; flèches, Super+T) reprennent une tuile, le monocle est quitté, le centrage est coupé, et
+; les tailles changées à la main repartent à parts égales. Les fenêtres d'application que
+; komorebi ne gérait pas sont aussi reprises.
+PersoToutTiler() {
+    actif := WinExist('A')
+    try {
+        state := PersoEtat()
+        im := state.monitors.focused
+        m := state.monitors.elements.%im%
+        iw := m.workspaces.focused
+        w := m.workspaces.elements.%iw%
+        if IsObject(w.monocle_container)
+            PersoKomorebic('toggle-monocle')
+        if w.apply_window_based_work_area_offset      ; retour au défaut : pleine largeur
+            PersoKomorebic('toggle-window-based-work-area-offset')
+        ; Fenêtres d'application que komorebi a ratées (ouvertes pendant une pause, revenues
+        ; de la barre des tâches...) : on les lui fait prendre en charge.
+        geres := Map()
+        Loop state.monitors.elements.length {
+            mm := state.monitors.elements.%(A_Index - 1)%
+            Loop mm.workspaces.elements.length {
+                ww := mm.workspaces.elements.%(A_Index - 1)%
+                Loop ww.containers.elements.length {
+                    cc := ww.containers.elements.%(A_Index - 1)%
+                    Loop cc.windows.elements.length
+                        geres[cc.windows.elements.%(A_Index - 1)%.hwnd] := 1
+                }
+                Loop ww.floating_windows.elements.length
+                    geres[ww.floating_windows.elements.%(A_Index - 1)%.hwnd] := 1
+                if IsObject(ww.monocle_container) {
+                    cc := ww.monocle_container
+                    Loop cc.windows.elements.length
+                        geres[cc.windows.elements.%(A_Index - 1)%.hwnd] := 1
+                }
+                if IsObject(ww.maximized_window)
+                    geres[ww.maximized_window.hwnd] := 1
+            }
+        }
+        for h in WinGetList() {
+            if geres.Has(h) || !PersoFenetreApp(h)
+                continue
+            WinActivate('ahk_id ' h)
+            if WinWaitActive('ahk_id ' h, , 1)
+                PersoKomorebic('manage')
+        }
+        flottantes := []
+        Loop w.floating_windows.elements.length {
+            i := A_Index - 1
+            flottantes.Push(w.floating_windows.elements.%i%.hwnd)
+        }
+        for h in flottantes {
+            if !WinExist('ahk_id ' h)
+                continue
+            if WinGetMinMax('ahk_id ' h) != 0
+                WinRestore('ahk_id ' h)
+            WinActivate('ahk_id ' h)
+            WinWaitActive('ahk_id ' h, , 1)
+            PersoKomorebic('toggle-float')
+        }
+    }
+    vide := A_Temp '\winarchy-perso-resize-vide.json'
+    try FileDelete(vide)
+    FileAppend('[]', vide)
+    PersoKomorebic('load-resize "' vide '"')
+    PersoKomorebic('retile')
+    if actif && WinExist('ahk_id ' actif)
+        try WinActivate('ahk_id ' actif)
+}
+
+; Super+Alt+flèches, selon l'état de la fenêtre active :
+; - tuilée (au moins 2 tuiles) : échange avec la tuile voisine dans cette direction ;
+; - flottante, ou seule tuile : calage sur une grille 2x2, comme le Snap de Windows.
+;   La fenêtre passe en flottant (Super+T la remet dans le tiling). Chaque flèche agit sur
+;   un axe : ← puis ↑ = coin haut gauche ; depuis la moitié gauche, → = pleine largeur,
+;   → encore = moitié droite. Pareil en vertical avec ↑ / ↓.
+; (Échanger deux tuiles reste sur Super+Shift+flèches.)
+PersoPlace(dir) {
+    static pos := Map()   ; hwnd -> [col, ligne, x, y, l, h] ; col/ligne : 0 début, 1 plein, 2 fin
+    h := WinExist('A')
+    if !h || PersoIgnoree(h)
+        return
+    try {
+        state := PersoEtat()
+        im := state.monitors.focused
+        m := state.monitors.elements.%im%
+        iw := m.workspaces.focused
+        w := m.workspaces.elements.%iw%
+        a := m.work_area_size
+        ax := a.left, ay := a.top, aw := a.right, ah := a.bottom
+        flottante := false
+        Loop w.floating_windows.elements.length {
+            i := A_Index - 1
+            if (w.floating_windows.elements.%i%.hwnd = h)
+                flottante := true
+        }
+        tuilee := false
+        Loop w.containers.elements.length {
+            c := w.containers.elements.%(A_Index - 1)%
+            Loop c.windows.elements.length
+                if (c.windows.elements.%(A_Index - 1)%.hwnd = h)
+                    tuilee := true
+        }
+        if (tuilee && w.containers.elements.length >= 2) {
+            PersoKomorebic('move ' dir)
+            return
+        }
+    } catch {
+        ; komorebi illisible : zone de travail Windows, sous la barre
+        MonitorGetWorkArea(MonitorGetPrimary(), &l, &t, &r, &b)
+        ax := l, ay := t + 34, aw := r - l, ah := b - t - 34
+        flottante := true
+    }
+
+    ; Position précédente, si la fenêtre n'a pas été bougée depuis
+    col := 1, lig := 1
+    if pos.Has(h) {
+        p := pos[h]
+        try {
+            WinGetPos(&cx, &cy, &cw, &ch, 'ahk_id ' h)
+            if (Abs(cx - p[3]) < 40 && Abs(cy - p[4]) < 40 && Abs(cw - p[5]) < 40 && Abs(ch - p[6]) < 40)
+                col := p[1], lig := p[2]
+        }
+    }
+    switch dir {
+        case 'left':  col := (col = 2) ? 1 : 0
+        case 'right': col := (col = 0) ? 1 : 2
+        case 'up':    lig := (lig = 2) ? 1 : 0
+        case 'down':  lig := (lig = 0) ? 1 : 2
+    }
+
+    pad := 6
+    dw := aw // 2, dh := ah // 2
+    x := ax + (col = 2 ? dw : 0), largeur := (col = 1) ? aw : dw
+    y := ay + (lig = 2 ? dh : 0), hauteur := (lig = 1) ? ah : dh
+    x += pad, y += pad, largeur -= 2 * pad, hauteur -= 2 * pad
+
+    if !flottante
+        PersoKomorebic('toggle-float')
+    if WinGetMinMax('ahk_id ' h) != 0
+        WinRestore('ahk_id ' h)
+    WinMove(x, y, largeur, hauteur, 'ahk_id ' h)
+    try WinGetPos(&cx, &cy, &cw, &ch, 'ahk_id ' h)
+    catch
+        cx := x, cy := y, cw := largeur, ch := hauteur
+    pos[h] := [col, lig, cx, cy, cw, ch]
+}
+
+PersoResizeOn(v?) {
+    static on := false
+    if IsSet(v)
+        on := v
+    return on
+}
+
+PersoResize() {
+    if PersoResizeOn()
+        return PersoResizeFin()
+    PersoResizeOn(true)
+    ToolTip('Redimensionnement : flèches ou hjkl (Maj = pas fin) — Échap, Entrée ou Super+Z pour sortir')
+}
+
+PersoResizeFin() {
+    PersoResizeOn(false)
+    ToolTip()
+    PersoKomorebic('resize-delta __DELTA__')
+}
+
+PersoResizePas(axe, sens, px) {
+    PersoKomorebic('resize-delta ' px)
+    PersoKomorebic('resize-axis ' axe ' ' sens)
+}
+
+; Super+S : réduit la fenêtre active, à chaque appui (n'importe quelle fenêtre).
+; Super+Shift+S ramène toutes celles réduites ainsi.
+; Une fenêtre ramenée autrement (barre des tâches, Alt+Tab) sort de la liste.
+PersoCachees() {
+    static liste := []
+    return liste
+}
+
+PersoNettoie(liste) {
+    i := liste.Length
+    while (i >= 1) {
+        h := liste[i]
+        if !WinExist('ahk_id ' h) || WinGetMinMax('ahk_id ' h) != -1
+            liste.RemoveAt(i)
+        i--
+    }
+}
+
+PersoCache() {
+    liste := PersoCachees()
+    PersoNettoie(liste)
+    h := WinExist('A')
+    if !h || PersoIgnoree(h)
+        return
+    for x in liste
+        if x = h
+            return WinMinimize('ahk_id ' h)
+    liste.Push(h)
+    WinMinimize('ahk_id ' h)
+}
+
+PersoRameneTout() {
+    liste := PersoCachees()
+    PersoNettoie(liste)
+    dernier := 0
+    while liste.Length {
+        dernier := liste.Pop()
+        WinRestore('ahk_id ' dernier)
+    }
+    if dernier
+        try WinActivate('ahk_id ' dernier)
+}
+
+; Exposé = Vue des tâches, ouverte par le vrai Win+Tab (son identifiant shell:::{3080F90E…}
+; ne marche plus sur Windows 11). Winarchy prend Win+Tab : coupé le temps de l'envoyer.
+PersoExpose() {
+    HotIf()
+    try Hotkey('#Tab', 'Off')
+    Send('#{Tab}')
+    Sleep(100)
+    try Hotkey('#Tab', 'On')
+}
+
+PersoClaude(profil) {
+    h := EnvGet('USERPROFILE')
+    Run('wt.exe -d "' h '\Work" __SHELL__ -NoExit -NoLogo -ExecutionPolicy Bypass -File "' h '\.winarchy-perso\claude.ps1" ' profil)
+}
+
+; Claude Desktop perso : 2e instance avec son propre dossier de données (--user-data-dir),
+; donc son propre compte, à côté de l'instance pro. Version Store : Windows range ce
+; dossier dans %LOCALAPPDATA%\Packages\Claude_pzs8sxrjxfjjc\LocalCache\Roaming\Claude-perso.
+; PID du processus principal de l'instance perso (0 si elle ne tourne pas).
+PersoClaudePersoPid() {
+    try {
+        for p in ComObjGet('winmgmts:').ExecQuery("SELECT ProcessId FROM Win32_Process WHERE Name = 'claude.exe' AND CommandLine LIKE '%Claude-perso%' AND NOT CommandLine LIKE '%--type=%'")
+            return p.ProcessId
+    }
+    return 0
+}
+
+; Fenêtre visible d'une instance : celle de l'instance perso (perso = true) ou de la pro.
+PersoClaudeFenetre(perso) {
+    pid := PersoClaudePersoPid()
+    for hwnd in WinGetList('Claude ahk_exe claude.exe ahk_class Chrome_WidgetWin_1')
+        if ((WinGetPID(hwnd) = pid) = perso)
+            return hwnd
+    return 0
+}
+
+; Ouvre / affiche / replie une instance de Claude Desktop. Repliée, elle part dans la zone
+; de notification : relancer le raccourci la fait réapparaître.
+PersoClaudeOuvre(hwnd, lancer) {
+    if (hwnd && WinActive(hwnd))
+        WinClose(hwnd)
+    else if hwnd
+        WinActivate(hwnd)
+    else
+        Run(lancer)
+}
+
+; Super+Ctrl+Shift+Backspace : instance pro (l'instance perso est ignorée).
+PersoClaudeBascule() => PersoClaudeOuvre(PersoClaudeFenetre(false), 'explorer.exe shell:AppsFolder\Claude_pzs8sxrjxfjjc!Claude')
+
+; Super+Ctrl+Alt+Shift+Entrée : instance perso.
+PersoClaudePerso() => PersoClaudeOuvre(PersoClaudeFenetre(true)
+    , '"' EnvGet('LOCALAPPDATA') '\Microsoft\WindowsApps\claude-desktop.exe" --user-data-dir="' EnvGet('APPDATA') '\Claude-perso"')
+
+; Outlook classique (OUTLOOK.EXE), pas le nouvel Outlook (olk.exe).
+PersoOutlook() {
+    if WinExist('ahk_exe OUTLOOK.EXE ahk_class rctrl_renwnd32')
+        return WinActivate()
+    try Run('outlook.exe')                        ; App Paths -> Office16\OUTLOOK.EXE
+    catch
+        Run('https://outlook.office.com/mail/')
+}
+
+PersoDeezer() {
+    if WinExist('ahk_exe Deezer.exe')
+        return WinActivate()
+    exe := EnvGet('LOCALAPPDATA') '\Programs\deezer-desktop\Deezer.exe'
+    if FileExist(exe)
+        Run('"' exe '"')
+    else
+        Run('https://www.deezer.com/')
+}
+
+; --- Icônes de la zone de notification dans YASB --------------------------------
+; Quand YASB (re)démarre (thème, mise à jour, plantage), les applis déjà lancées ne lui
+; renvoient pas toujours leur icône (Ditto, Discord, OpenVPN, iCloud...). À chaque
+; nouveau processus yasb.exe, on rediffuse « TaskbarCreated » : chaque appli recrée
+; alors son icône, comme après un redémarrage de l'Explorateur.
+SetTimer(PersoSurveilleYasb, 3000)
+PersoSurveilleYasb() {
+    static dernier := 0
+    pid := ProcessExist('yasb.exe')
+    if (pid && pid != dernier)
+        SetTimer(PersoRediffuseTray, -8000)       ; laisse YASB monter son systray
+    dernier := pid
+}
+PersoRediffuseTray() {
+    msg := DllCall('RegisterWindowMessage', 'Str', 'TaskbarCreated', 'UInt')
+    DllCall('SendMessageTimeout', 'Ptr', 0xFFFF, 'UInt', msg, 'Ptr', 0, 'Ptr', 0
+        , 'UInt', 2, 'UInt', 3000, 'Ptr*', 0)     ; HWND_BROADCAST, SMTO_ABORTIFHUNG
+}
+
+; --- Focus qui suit la souris : gardien ----------------------------------------
+; Un redémarrage de komorebi (ou autre) peut couper le réglage Windows « activer une
+; fenêtre en la survolant ». Toutes les 2 s, on vérifie et on le remet si besoin.
+SetTimer(PersoSurveilleSurvol, 2000)
+PersoSurveilleSurvol() {
+    actif := 0
+    DllCall('SystemParametersInfo', 'UInt', 0x1000, 'UInt', 0, 'Int*', &actif, 'UInt', 0)  ; GET ACTIVEWINDOWTRACKING
+    if actif
+        return
+    DllCall('SystemParametersInfo', 'UInt', 0x1001, 'UInt', 0, 'Ptr', 1, 'UInt', 3)    ; SET ACTIVEWINDOWTRACKING
+    DllCall('SystemParametersInfo', 'UInt', 0x100D, 'UInt', 0, 'Ptr', 1, 'UInt', 3)    ; premier plan au survol
+    DllCall('SystemParametersInfo', 'UInt', 0x2003, 'UInt', 0, 'Ptr', 150, 'UInt', 3)  ; après 150 ms
+}
+; <<< raccourcis-perso <<<
+'@
+    $bloc = $bloc.Replace('__SHELL__', $shell).Replace('__DELTA__', "$delta")
+
+    Save-UserAhk $UserAhk $MainAhk $ahkExe ($texte.TrimEnd() + "`r`n`r`n" + $bloc)
+    Restart-WinarchyAhk $MainAhk $ahkExe
+    Set-Survol $true
+}
+
+# --- Réglages perso dans les modèles de Winarchy ---------------------------------
+# Winarchy régénère komorebi.json et la config YASB depuis templates\ à chaque thème : on
+# modifie donc les modèles eux-mêmes. Ils sont versionnés dans le fork ; chaque patch est
+# idempotent, et réappliqué si une mise à jour du projet d'origine les a repris.
+
+function Invoke-WinarchyCli([string]$Root, [string[]]$arguments) {
+    & (Join-Path $Root 'bin\winarchy.cmd') @arguments 2>&1 | ForEach-Object { "      $_" } | Out-Host
+    return ($LASTEXITCODE -eq 0)
+}
+
+function Get-ThemeActif([string]$Root) {
+    $ligne = & (Join-Path $Root 'bin\winarchy.cmd') theme list 2>$null | Where-Object { $_ -match '^\s*\*\s*(\S+)' } | Select-Object -First 1
+    if ($ligne -match '^\s*\*\s*(\S+)') { return $Matches[1] }
+    return $null
+}
+
+# Fenêtre seule : pleine largeur par défaut ; Super+F la centre (offset = 1/4 de l'écran
+# à gauche, réduction de 1/2 : komorebi compte « right » comme une réduction de largeur).
+function Edit-ModeleKomorebi([string]$t) {
+    $largeur = 1920
+    try {
+        Add-Type -AssemblyName System.Windows.Forms
+        $largeur = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds.Width
+    } catch { }
+    $g = [int]($largeur / 4); $d = 2 * $g
+    $i = $t.IndexOf('"monitors": [')
+    if ($i -lt 0) { throw '« "monitors": [ » introuvable' }
+    $w = $t.IndexOf('"workspaces": [', $i)
+    $f = $t.IndexOf(']', $w)
+    if ($w -lt 0 -or $f -lt 0) { throw 'bureaux du premier écran introuvables' }
+    $bureaux = [regex]::Replace($t.Substring($w, $f - $w), '("layout":\s*"[^"]*")\s*\}', '$1, "apply_window_based_work_area_offset": false }')
+    $bureaux = $bureaux -replace '(, "apply_window_based_work_area_offset": false)+', '$1'
+    $t = $t.Substring(0, $w) + $bureaux + $t.Substring($f)
+    $offset = "`"window_based_work_area_offset`": { `"left`": $g, `"top`": 0, `"right`": $d, `"bottom`": 0 },"
+    $ecran = $t.Substring($i, $w - $i)
+    if ($ecran -match '"window_based_work_area_offset":\s*\{[^}]*\},') {
+        $ecran = $ecran.Replace($Matches[0], $offset)
+    } else {
+        $ecran = [regex]::Replace($ecran, '\{(\s*)$', "{`$1$offset`$1`"window_based_work_area_offset_limit`": 1,`$1")
+    }
+    $t.Substring(0, $i) + $ecran + $t.Substring($w)
+}
+
+# Barre YASB : groupes toujours dépliés, et pas de compteur Codex.
+function Edit-ModeleYasb([string]$t) {
+    $t = [regex]::Replace($t, '(collapse_options:\s*\r?\n\s*enabled:\s*)true', '${1}false')
+    $t.Replace('widgets: ["claude_usage", "codex_usage"]', 'widgets: ["claude_usage"]')
+}
+
+function Set-ReglagesWinarchy([string]$Root) {
+    Write-Host '==> Réglages perso dans les modèles de Winarchy'
+    $change = $false
+    $patchs = @{ 'templates\komorebi.json.tpl' = ${function:Edit-ModeleKomorebi}; 'templates\yasb-config.yaml.tpl' = ${function:Edit-ModeleYasb} }
+    foreach ($rel in $ModelesPatches) {
+        $p = Join-Path $Root $rel
+        if (-not (Test-Path $p)) { Warn "$rel introuvable : réglage ignoré"; continue }
+        $avant = [IO.File]::ReadAllText($p)
+        try { $apres = & $patchs[$rel] $avant }
+        catch { Warn "$rel : modèle inattendu ($($_.Exception.Message)), réglage ignoré"; continue }
+        if ($apres -ne $avant) {
+            [IO.File]::WriteAllText($p, $apres, (New-Object Text.UTF8Encoding $false))
+            Ok "$rel patché"
+            $change = $true
+        } else { Info "$rel déjà à jour" }
+    }
+    # Règles komorebi par appli (rules.toml).
+    # Claude Desktop se replie dans la zone de notification et komorebi le perdait au retour.
+    $rules = Join-Path $Root 'config\komorebi\rules.toml'
+    $exemple = Join-Path $Root 'config\komorebi\rules.toml.example'
+    if (-not (Test-Path $rules) -and (Test-Path $exemple)) { Copy-Item $exemple $rules }
+    $actuel = if (Test-Path $rules) { [IO.File]::ReadAllText($rules) } else { '' }
+    # Pas de « manage exe = claude.exe » : komorebi tuilait alors aussi les fenêtres fantômes
+    # IME / MSCTFIME UI de Claude et la moitié droite du bureau se redimensionnait. On gère
+    # la fenêtre par son titre et on ignore ces fantômes. Une règle manage l'emporte sur
+    # ignore : on la retire.
+    $mauvaise = '(?m)^\[\[manage\]\]\s*\r?\n\s*exe\s*=\s*"claude\.exe"\s*(\r?\n)?'
+    if ($actuel -match $mauvaise) {
+        $actuel = [regex]::Replace($actuel, $mauvaise, '')
+        [IO.File]::WriteAllText($rules, $actuel, (New-Object Text.UTF8Encoding $false))
+        Warn 'Règle komorebi « manage claude.exe » retirée : redémarre komorebi pour l''oublier (reload ne retire pas les règles)'
+    }
+    $voulues = @(
+        @('manage', 'title', 'Claude'),
+        @('tray_and_multi_window', 'exe', 'claude.exe'),
+        @('layered', 'exe', 'claude.exe'),
+        @('ignore', 'class', 'MSCTFIME UI'),
+        @('ignore', 'class', 'IME')
+    )
+    foreach ($r in $voulues) {
+        $cat, $cle, $val = $r
+        if ($actuel -match "(?m)^\[\[$cat\]\]\s*\r?\n\s*$cle\s*=\s*`"$([regex]::Escape($val))`"") { continue }
+        if (Invoke-WinarchyCli $Root @('rules', 'add', $cat, $cle, $val)) { Ok "Règle komorebi : $cat $cle $val" }
+        else { Warn "Règle komorebi $cat $cle $val non ajoutée" }
+    }
+    if ($change) { Update-ThemeActif $Root }
+}
+
+function Update-ThemeActif([string]$Root) {
+    $theme = Get-ThemeActif $Root
+    if (-not $theme) { Warn 'Thème actif introuvable : lance « winarchy theme set <thème> » pour appliquer.'; return }
+    if (Invoke-WinarchyCli $Root @('theme', 'set', $theme)) { Ok "Thème « $theme » réappliqué" }
+    else { Warn "« winarchy theme set $theme » a échoué" }
+}
+
+# --- Fork : remotes, mise à jour, sauvegarde ----------------------------------------
+
+# origin = ton fork, upstream = projet d'origine. Une installation faite depuis le projet
+# d'origine (origin = guidonaselli) est convertie.
+function Set-RemotesWinarchy([string]$Root) {
+    $urlFork  = "https://github.com/$Fork.git"
+    $urlAmont = "https://github.com/$Amont.git"
+    $remotes = @(& git -C $Root remote)
+    $origin = if ($remotes -contains 'origin') { (& git -C $Root remote get-url origin) -replace '\.git$', '' } else { '' }
+    if ($origin -eq ($urlAmont -replace '\.git$', '')) {
+        & git -C $Root remote rename origin upstream
+        $remotes = @(& git -C $Root remote)
+        $origin = ''
+    }
+    if (-not $origin) { & git -C $Root remote add origin $urlFork; Ok "Remote origin : $urlFork" }
+    if ($remotes -notcontains 'upstream') { & git -C $Root remote add upstream $urlAmont; Ok "Remote upstream : $urlAmont" }
+    & git -C $Root fetch -q origin
+    & git -C $Root branch -q --set-upstream-to=origin/release release 2>$null
+}
+
+function Invoke-SyncFork([string]$Root, [string[]]$arguments) {
+    & pwsh -NoProfile -ExecutionPolicy Bypass -File (Join-Path $Root 'perso\Sync-Upstream.ps1') @arguments 2>&1 |
+        ForEach-Object { "      $_" } | Out-Host
+    return ($LASTEXITCODE -eq 0)
+}
+
+# Mise à jour (à chaque lancement) : fusion du projet d'origine, migration, push sur le fork.
+function Update-WinarchyKomorebi([string]$Root) {
+    Write-Host '==> Mise à jour de Winarchy (projet d''origine -> ton fork)'
+    if (-not (Test-Path (Join-Path $Root '.git'))) { Warn "$Root n'est pas un dépôt git : mise à jour sautée."; return }
+    Set-RemotesWinarchy $Root
+    if (Invoke-SyncFork $Root @()) { Ok 'Winarchy à jour' }
+    else { Warn 'Mise à jour impossible (détails ci-dessus) : les réglages perso sont quand même appliqués.' }
+}
+
+# Réglages appliqués par ce script (user.ahk, rules.toml, modèles) : commit + push sur le fork.
+function Save-ReglagesFork([string]$Root) {
+    Write-Host '==> Sauvegarde des réglages sur ton fork'
+    if (Invoke-SyncFork $Root @('-SauverSeulement')) { Ok "Poussé sur github.com/$Fork" }
+    else { Warn 'Sauvegarde sur le fork impossible (détails ci-dessus).' }
+}
+
+# Winarchy absent : installation depuis le fork (boot.ps1), activée au démarrage de session.
+function Install-WinarchyKomorebi {
+    Write-Host "==> Winarchy introuvable : installation ($Fork)"
+    $env:WINARCHY_ACTIVATE = '1'
+    try {
+        $boot = Invoke-RestMethod "https://raw.githubusercontent.com/$Fork/release/boot.ps1"
+        & ([scriptblock]::Create($boot))
+    } catch {
+        Err "Installation de Winarchy échouée : $($_.Exception.Message)"
+        exit 1
+    }
+    $env:Path = [Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' + [Environment]::GetEnvironmentVariable('Path', 'User')
+    $root = Find-WinarchyKomorebi
+    if (-not $root) { Err 'Winarchy installé mais introuvable (config\ahk\winarchy.ahk absent).'; exit 1 }
+    Set-RemotesWinarchy $root
+    if (-not (Get-Process komorebi -ErrorAction SilentlyContinue)) {
+        Invoke-WinarchyCli $root @('reload') | Out-Null
+        Start-Sleep -Seconds 3
+    }
+    Ok "Winarchy installé : $root"
+}
+
+# --- Déroulé ---------------------------------------------------------------------
+
+Assert-PasAdmin
+$Komorebi = Find-WinarchyKomorebi
+if ($Desinstaller) {
+    if (-not $Komorebi) { Warn 'Winarchy introuvable : rien à retirer.'; exit 0 }
+    Write-Host '==> Réglages perso retirés des modèles de Winarchy'
+    & git -C $Komorebi checkout upstream/release -- @($ModelesPatches | ForEach-Object { $_ -replace '\\', '/' }) 2>&1 | Out-Null
+    if ($LASTEXITCODE -eq 0) { Ok 'Modèles remis comme dans le projet d''origine' } else { Warn 'Modèles non remis d''origine (git checkout).' }
+    Update-ThemeActif $Komorebi
+    Install-Raccourcis $Komorebi
+    exit 0
+}
+
+if ($Komorebi) {
+    if (-not $SansMiseAJour) { Update-WinarchyKomorebi $Komorebi }
+} else {
+    Install-WinarchyKomorebi
+    $Komorebi = Find-WinarchyKomorebi
+}
+Write-Host "==> Winarchy : $Komorebi"
+Set-ReglagesWinarchy $Komorebi
+Install-Raccourcis $Komorebi
+Save-ReglagesFork $Komorebi
+
+Write-Host ''
+Write-Host '==> Terminé. À vérifier :' -ForegroundColor Cyan
+Write-Host '   - Super seul ouvre le lanceur d''applis, Super+Espace le menu Démarrer'
+Write-Host '   - Super+Q ouvre le menu Winarchy (Super+Alt+Espace aussi)'
+Write-Host '   - Super+K liste tes raccourcis sous « Perso : … »'
+Write-Host '   - Connexion, une fois par compte (réglages copiés sans jetons) :'
+Write-Host '       Super+Backspace puis /login (Foxis), Super+Shift+Backspace puis /login (perso)'
+Write-Host '       $env:GH_CONFIG_DIR="$HOME\.config\gh-foxis"; gh auth login   (idem avec gh-perso)'

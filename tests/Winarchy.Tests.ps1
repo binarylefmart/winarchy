@@ -2835,7 +2835,7 @@ Describe 'First install on a clean machine' {
     }
 
     It 'talks to the user in English' {
-        $files = git -C $script:Root ls-files '*.ps1' '*.psm1' ':!tests' ':!scripts/*seelen*' | ForEach-Object { Join-Path $script:Root $_ }
+        $files = git -C $script:Root ls-files '*.ps1' '*.psm1' ':!tests' ':!scripts/*seelen*' ':!perso' | ForEach-Object { Join-Path $script:Root $_ }
         $hits = Select-String -Path $files -Pattern '(Write-Winarchy(Ok|Info|Warn|Err)|Invoke-Step|throw)\b.*[áéíóúñ¿¡]'
         $hits | ForEach-Object { "$($_.Path):$($_.LineNumber)" } | Should -BeNullOrEmpty
     }
@@ -2910,7 +2910,7 @@ try { Invoke-Expression (Get-Content $Boot -Raw) } catch { Add-Content $global:L
         It 'installs git when missing, then clones release' {
             $r = Invoke-Boot -Strip git
             ($r.Log -match '^winget install --id Git\.Git --exact --source winget').Count | Should -Be 1
-            $r.Log | Should -Contain "git clone --branch release https://github.com/guidonaselli/winarchy.git $($r.Dir)"
+            $r.Log | Should -Contain "git clone --branch release https://github.com/binarylefmart/winarchy.git $($r.Dir)"
             $r.Log | Should -Contain "pwsh -NoProfile -ExecutionPolicy Bypass -File $($r.Dir)\install.ps1"
             $r.Log -match '^ERROR' | Should -BeNullOrEmpty
         }

@@ -1,9 +1,11 @@
 # Winarchy one-command installer:
-#   irm https://raw.githubusercontent.com/guidonaselli/winarchy/release/boot.ps1 | iex
+#   irm https://raw.githubusercontent.com/binarylefmart/winarchy/release/boot.ps1 | iex
 # Optional: $env:WINARCHY_DIR (default C:\winarchy), $env:WINARCHY_ACTIVATE = '1'
+# Personal fork of guidonaselli/winarchy: installs from the fork (perso\setup-winarchy.ps1
+# then adds the upstream remote and applies the personal settings).
 & {
     $ErrorActionPreference = 'Stop'
-    $repo = 'https://github.com/guidonaselli/winarchy.git'
+    $repo = 'https://github.com/binarylefmart/winarchy.git'
     $branch = 'release'
     $dir = 'C:\winarchy'
     if ($env:WINARCHY_DIR) { $dir = $env:WINARCHY_DIR }

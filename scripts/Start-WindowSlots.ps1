@@ -42,11 +42,15 @@ function Write-Log {
 $debounceMs = 800
 $pipeName = 'winarchy-window-slots'
 
-# Una sola instancia: el pipe es el candado. Sin esto, la tarea del autostart y un arranque
-# a mano dejan dos daemons peleando por el mismo nombre de pipe, y el que pierde reintenta
-# en loop llenando el log.
-if (Test-WinarchyWindowSlots) {
-    Write-Log 'another instance already holds the pipe; exiting'
+# Una sola instancia: el mutex es el candado (no el pipe, que desaparece en cada
+# reconexión). Sin esto, la tarea del autostart y un arranque a mano dejan varios daemons
+# peleando por el mismo nombre de pipe, y los que pierden reintentan en loop llenando el log.
+# Se toma acá y lo suelta el sistema cuando el proceso muere.
+$instanceMutex = New-Object System.Threading.Mutex($false, $script:WinarchyWindowSlotsMutexName)
+$owned = try { $instanceMutex.WaitOne(0) } catch [System.Threading.AbandonedMutexException] { $true }
+if (-not $owned) {
+    Write-Log 'another instance is already running; exiting'
+    $instanceMutex.Dispose()
     return
 }
 

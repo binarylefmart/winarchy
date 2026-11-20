@@ -390,10 +390,21 @@ function Test-WinarchySlotEvent {
     )
 }
 
+# Candado de instancia única. No el named pipe: ese sólo existe mientras la suscripción
+# está abierta, y en cada reconexión (komorebi caído, pipe ocupado) desaparece unos
+# segundos — una segunda instancia lanzada justo ahí pasaba el chequeo y quedaban varios
+# daemons vivos peleándose por el pipe. El mutex vive exactamente lo que vive el proceso.
+$script:WinarchyWindowSlotsMutexName = 'Global\WinarchyWindowSlots'
+
 function Test-WinarchyWindowSlots {
-    <# El daemon vivo Y suscrito: el named pipe existe mientras la suscripción está abierta,
-       y desaparece con el proceso. Más fiable que buscar un powershell.exe entre otros. #>
-    Test-Path '\\.\pipe\winarchy-window-slots'
+    <# El daemon vivo: su mutex existe mientras el proceso exista, esté o no suscrito en
+       este momento. Más fiable que buscar un pwsh entre otros. #>
+    $mutex = $null
+    if ([System.Threading.Mutex]::TryOpenExisting($script:WinarchyWindowSlotsMutexName, [ref]$mutex)) {
+        $mutex.Dispose()
+        return $true
+    }
+    $false
 }
 
 function Stop-WinarchyWindowSlots {

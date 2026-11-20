@@ -72,7 +72,7 @@ $Perso    = Join-Path $env:USERPROFILE '.winarchy-perso'
 $AhkDebut = '; >>> raccourcis-perso (setup-winarchy.ps1) >>>'
 $AhkFin   = '; <<< raccourcis-perso <<<'
 # Modèles suivis par git que ce script patche (et que Sync-Upstream.ps1 sait reprendre).
-$ModelesPatches = @('templates\komorebi.json.tpl', 'templates\yasb-config.yaml.tpl')
+$ModelesPatches = @('templates\komorebi.json.tpl', 'templates\yasb-config.yaml.tpl', 'templates\yasb-styles.css.tpl')
 
 function Ok([string]$m)   { Write-Host "  OK  $m" -ForegroundColor Green }
 function Info([string]$m) { Write-Host "  --  $m" -ForegroundColor DarkGray }
@@ -819,13 +819,60 @@ function Edit-ModeleKomorebi([string]$t) {
 # Barre YASB : groupes toujours dépliés, et pas de compteur Codex.
 function Edit-ModeleYasb([string]$t) {
     $t = [regex]::Replace($t, '(collapse_options:\s*\r?\n\s*enabled:\s*)true', '${1}false')
-    $t.Replace('widgets: ["claude_usage", "codex_usage"]', 'widgets: ["claude_usage"]')
+    $t = $t.Replace('widgets: ["claude_usage", "codex_usage"]', 'widgets: ["claude_usage"]')
+    # Indicateur des fenêtres ouvertes (icônes cliquables) après l'icône de layout.
+    if ($t -notmatch 'yasb\.taskbar\.TaskbarWidget') {
+        if ($t -notmatch '"komorebi_active_layout", ' -or $t -notmatch '(?m)^  komorebi_workspaces:') { throw 'ancre taskbar absente' }
+        $t = $t.Replace('"komorebi_active_layout", ', '"komorebi_active_layout", "taskbar", ')
+        $bloc = @'
+  # Fenêtres ouvertes sur cet écran (perso, setup-winarchy.ps1) : clic = focus/réduire.
+  taskbar:
+    type: "yasb.taskbar.TaskbarWidget"
+    options:
+      icon_size: 16
+      monitor_exclusive: true
+      animation:
+        enabled: true
+      title_label:
+        enabled: false
+      ignore_apps:
+        processes: []
+        titles: []
+        classes: []
+      callbacks:
+        on_left: "toggle_window"
+        on_middle: "do_nothing"
+        on_right: "context_menu"
+
+'@ -replace '\r?\n', $(if ($t -match "`r`n") { "`r`n" } else { "`n" })
+        $t =[regex]::Replace($t, '(?m)^(?=  komorebi_workspaces:)', $bloc.Replace('$', '$$'), 1)
+    }
+    $t
+}
+
+# Styles de l'indicateur des fenêtres ouvertes (fenêtre active soulignée de l'accent).
+function Edit-ModeleYasbStyles([string]$t) {
+    if ($t -match '\.taskbar-widget') { return $t }
+    $nl = if ($t -match "`r`n") { "`r`n" } else { "`n" }
+    ($t.TrimEnd() + "`n`n" + @'
+/* Fenêtres ouvertes (perso, setup-winarchy.ps1) */
+.taskbar-widget { padding: 0 4px; }
+.taskbar-widget .app-container {
+    margin: 2px 1px;
+    padding: 0 4px;
+    border-radius: 4px;
+    border-bottom: 2px solid transparent;
+}
+.taskbar-widget .app-container:hover { background-color: {{colors.color8}}; }
+.taskbar-widget .app-container.foreground { border-bottom: 2px solid {{ui.accent}}; }
+.taskbar-widget .app-container.flashing { background-color: {{colors.accent_ui}}; }
+'@ + "`n") -replace '\r?\n', $nl
 }
 
 function Set-ReglagesWinarchy([string]$Root) {
     Write-Host '==> Réglages perso dans les modèles de Winarchy'
     $change = $false
-    $patchs = @{ 'templates\komorebi.json.tpl' = ${function:Edit-ModeleKomorebi}; 'templates\yasb-config.yaml.tpl' = ${function:Edit-ModeleYasb} }
+    $patchs = @{ 'templates\komorebi.json.tpl' = ${function:Edit-ModeleKomorebi}; 'templates\yasb-config.yaml.tpl' = ${function:Edit-ModeleYasb}; 'templates\yasb-styles.css.tpl' = ${function:Edit-ModeleYasbStyles} }
     foreach ($rel in $ModelesPatches) {
         $p = Join-Path $Root $rel
         if (-not (Test-Path $p)) { Warn "$rel introuvable : réglage ignoré"; continue }

@@ -43,7 +43,7 @@ bars:
       bottom: 0
       right: 0
     widgets:
-      left: ["home", "komorebi_workspaces", "komorebi_active_layout", "active_window", "extras"]
+      left: ["home", "komorebi_workspaces", "komorebi_active_layout", "taskbar", "active_window", "extras"]
       center: ["clock"]
       right: ["weather", "game_mode", "stay_awake", "media", "ai", "system", "connections", "volume", "battery", "winarchy_update", "notifications", "systray", "winarchy_menu"]
     layouts:
@@ -125,6 +125,24 @@ widgets:
         on_middle: "do_nothing"
         on_right: "do_nothing"
 
+  # Fenêtres ouvertes sur cet écran (perso, setup-winarchy.ps1) : clic = focus/réduire.
+  taskbar:
+    type: "yasb.taskbar.TaskbarWidget"
+    options:
+      icon_size: 16
+      monitor_exclusive: true
+      animation:
+        enabled: true
+      title_label:
+        enabled: false
+      ignore_apps:
+        processes: []
+        titles: []
+        classes: []
+      callbacks:
+        on_left: "toggle_window"
+        on_middle: "do_nothing"
+        on_right: "context_menu"
   komorebi_workspaces:
     type: "komorebi.workspaces.WorkspaceWidget"
     options:

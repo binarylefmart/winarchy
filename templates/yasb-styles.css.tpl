@@ -571,3 +571,15 @@
 .codex-usage-menu .heatmap .cell.outside {
     background-color: transparent;
 }
+
+/* Fenêtres ouvertes (perso, setup-winarchy.ps1) */
+.taskbar-widget { padding: 0 4px; }
+.taskbar-widget .app-container {
+    margin: 2px 1px;
+    padding: 0 4px;
+    border-radius: 4px;
+    border-bottom: 2px solid transparent;
+}
+.taskbar-widget .app-container:hover { background-color: {{colors.color8}}; }
+.taskbar-widget .app-container.foreground { border-bottom: 2px solid {{ui.accent}}; }
+.taskbar-widget .app-container.flashing { background-color: {{colors.accent_ui}}; }

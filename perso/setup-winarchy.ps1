@@ -161,6 +161,37 @@ Send '{PrintScreen}'
     Ok "Lanceur capture Screenpresso : $ahk"
 }
 
+# Bouton presse-papiers de la barre YASB -> historique Ditto (Ditto.exe /Open ;
+# le démarre au besoin).
+function Write-DittoLauncher {
+    $ahk = Join-Path $Perso 'ditto-historique.ahk'
+    New-Item -ItemType Directory -Force $Perso | Out-Null
+    Write-Utf8Bom $ahk @'
+#Requires AutoHotkey v2.0
+#SingleInstance Force
+; Lancé par le bouton presse-papiers de la barre YASB (setup-winarchy.ps1).
+exe := ''
+for d in [EnvGet('ProgramFiles'), EnvGet('ProgramFiles(x86)'), EnvGet('LOCALAPPDATA') '\Programs']
+    if FileExist(d '\Ditto\Ditto.exe') {
+        exe := d '\Ditto\Ditto.exe'
+        break
+    }
+if exe = '' {
+    MsgBox 'Ditto introuvable.', 'Presse-papiers', 'Icon!'
+    ExitApp
+}
+if !ProcessExist('Ditto.exe') {
+    Run '"' exe '"'
+    if !ProcessWait('Ditto.exe', 10)
+        ExitApp
+    Sleep 1500
+}
+Sleep 150        ; laisse le clic sur la barre se terminer
+Run '"' exe '" /Open'
+'@
+    Ok "Lanceur historique Ditto : $ahk"
+}
+
 # Les raccourcis Claude Desktop ouvrent la version Store (AppID Claude_pzs8sxrjxfjjc).
 function Test-ClaudeDesktop {
     if (Get-StartApps -ErrorAction SilentlyContinue | Where-Object { $_.Name -eq 'Claude' }) { Ok 'Claude Desktop installé' }
@@ -295,6 +326,7 @@ function Install-Raccourcis([string]$Root) {
     Copy-Profils
     Write-ClaudeLauncher
     Write-ScreenpressoLauncher
+    Write-DittoLauncher
     Test-ClaudeDesktop
     $shell = if (Get-Command pwsh -ErrorAction SilentlyContinue) { 'pwsh' } else { 'powershell' }
 
@@ -851,6 +883,27 @@ function Edit-ModeleYasb([string]$t) {
     $t = $t.Replace('tooltip_label: "Region capture"', 'tooltip_label: "Capture (Screenpresso)"')
     $t = $t.Replace('on_left: "exec winarchy screenshot region"', 'on_left: "exec cmd.exe /c %USERPROFILE%\\.winarchy-perso\\screenpresso-capture.ahk"')
     $t = $t.Replace('"tool_record", "tool_stop", ', '')
+    # Bouton presse-papiers -> historique Ditto, juste après le bouton capture.
+    if ($t -notmatch '(?m)^  tool_clipboard:') {
+        if ($t -notmatch '"tool_region", ' -or $t -notmatch '(?m)^  tool_region:') { throw 'ancre tool_clipboard absente' }
+        $t = $t.Replace('"tool_region", ', '"tool_region", "tool_clipboard", ')
+        $bloc = (@'
+  # Historique du presse-papiers (perso, setup-winarchy.ps1) -> Ditto.
+  tool_clipboard:
+    type: "yasb.custom.CustomWidget"
+    options:
+      label: "<span>ICONE</span>"
+      class_name: "tool-widget"
+      tooltip: true
+      tooltip_label: "Presse-papiers (Ditto)"
+      callbacks:
+        on_left: "exec cmd.exe /c %USERPROFILE%\\.winarchy-perso\\ditto-historique.ahk"
+        on_middle: "do_nothing"
+        on_right: "do_nothing"
+
+'@).Replace('ICONE', [string][char]0xF0EA) -replace '\r?\n', $(if ($t -match "`r`n") { "`r`n" } else { "`n" })
+        $t = [regex]::Replace($t, '(?m)^(?=  tool_region:)', $bloc.Replace('$', '$$'), 1)
+    }
     # Indicateur des fenêtres ouvertes (icônes cliquables) après l'icône de layout.
     if ($t -notmatch 'yasb\.taskbar\.TaskbarWidget') {
         if ($t -notmatch '"komorebi_active_layout", ' -or $t -notmatch '(?m)^  komorebi_workspaces:') { throw 'ancre taskbar absente' }

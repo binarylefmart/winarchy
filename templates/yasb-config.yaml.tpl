@@ -319,6 +319,18 @@ widgets:
         on_middle: "toggle_label"
         on_right: "cycle_status"
 
+  # Historique du presse-papiers (perso, setup-winarchy.ps1) -> Ditto.
+  tool_clipboard:
+    type: "yasb.custom.CustomWidget"
+    options:
+      label: "<span></span>"
+      class_name: "tool-widget"
+      tooltip: true
+      tooltip_label: "Presse-papiers (Ditto)"
+      callbacks:
+        on_left: "exec cmd.exe /c %USERPROFILE%\\.winarchy-perso\\ditto-historique.ahk"
+        on_middle: "do_nothing"
+        on_right: "do_nothing"
   tool_region:
     type: "yasb.custom.CustomWidget"
     options:
@@ -395,7 +407,7 @@ widgets:
     type: "yasb.grouper.GrouperWidget"
     options:
       class_name: "extras-grouper"
-      widgets: ["tool_region", "tool_ocr", "tool_qr", "tool_color", "dnd", "brightness", "power_plan"]
+      widgets: ["tool_region", "tool_clipboard", "tool_ocr", "tool_qr", "tool_color", "dnd", "brightness", "power_plan"]
       hide_empty: false
       collapse_options:
         enabled: false

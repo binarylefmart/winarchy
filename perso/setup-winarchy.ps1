@@ -31,6 +31,7 @@
         Super+Backspace            Claude Code (Foxis)
         Super+Shift+Backspace      Claude Code (perso)
         Super+Ctrl+Shift+Backspace Claude Desktop (ouvre / affiche / replie ; Super+Shift+A ne fait plus rien)
+        Super+Ctrl+Alt+Shift+Backspace  idem (Claude Desktop pro)
         Super+Ctrl+Alt+Shift+Entrée  Claude Desktop perso (2e instance, compte perso ; ouvre / affiche / replie)
         Super+A / Super+Alt+Tab    Exposé (Vue des tâches de Windows)
         Super+O                    Outlook classique (Obsidian n'a plus de raccourci ; Super+Shift+O ne fait plus rien)
@@ -265,6 +266,7 @@ InstallMouseHook()
 #Backspace::PersoClaude('foxis')                  ; Claude Code (Foxis)
 #+Backspace::PersoClaude('perso')                 ; Claude Code (perso)
 #^+Backspace::PersoClaudeBascule()                ; Claude Desktop : ouvre / affiche / replie
+#^!+Backspace::PersoClaudeBascule()               ; Claude Desktop (même chose, avec Alt)
 #+a::return                                       ; Supprimé (webapp claude.ai de Winarchy)
 #^!+Enter::PersoClaudePerso()                     ; Claude Desktop perso (2e instance, compte perso)
 #a::PersoExpose()                                 ; Exposé (Vue des tâches)
@@ -687,7 +689,7 @@ PersoClaudeOuvre(hwnd, lancer) {
         Run(lancer)
 }
 
-; Super+Ctrl+Shift+Backspace : instance pro (l'instance perso est ignorée).
+; Super+Ctrl+Shift+Backspace (ou + Alt) : instance pro (l'instance perso est ignorée).
 PersoClaudeBascule() => PersoClaudeOuvre(PersoClaudeFenetre(false), 'explorer.exe shell:AppsFolder\Claude_pzs8sxrjxfjjc!Claude')
 
 ; Super+Ctrl+Alt+Shift+Entrée : instance perso.

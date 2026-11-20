@@ -159,6 +159,21 @@ function Set-Survol([bool]$actif) {
     }
 }
 
+# Touche Office (Ctrl+Alt+Maj+Super) : Windows s'en sert pour ouvrir Office / Copilot, ce
+# qui vole le focus des raccourcis Hyper (Super+Ctrl+Alt+Maj+…). Désactivée en
+# redirigeant le protocole ms-officeapp vers rundll32 (ne fait rien).
+function Set-ToucheOffice([bool]$desactivee) {
+    $cle = 'HKCU:\Software\Classes\ms-officeapp'
+    if ($desactivee) {
+        New-Item "$cle\Shell\Open\Command" -Force | Out-Null
+        Set-Item "$cle\Shell\Open\Command" -Value 'rundll32'
+        Ok 'Touche Office désactivée (Ctrl+Alt+Maj+Super n''ouvre plus Office / Copilot)'
+    } elseif (Test-Path $cle) {
+        Remove-Item $cle -Recurse -Force
+        Ok 'Touche Office rétablie'
+    }
+}
+
 function Find-WinarchyKomorebi {
     $racines = @()
     $cmd = Get-Command winarchy -ErrorAction SilentlyContinue
@@ -245,6 +260,7 @@ function Install-Raccourcis([string]$Root) {
         Save-UserAhk $UserAhk $MainAhk $ahkExe $texte
         Restart-WinarchyAhk $MainAhk $ahkExe
         Set-Survol $false
+        Set-ToucheOffice $false
         if (Test-Path $Perso) { Remove-Item $Perso -Recurse -Force; Ok "Supprimé : $Perso" }
         return
     }
@@ -754,6 +770,7 @@ PersoSurveilleSurvol() {
     Save-UserAhk $UserAhk $MainAhk $ahkExe ($texte.TrimEnd() + "`r`n`r`n" + $bloc)
     Restart-WinarchyAhk $MainAhk $ahkExe
     Set-Survol $true
+    Set-ToucheOffice $true
 }
 
 # --- Réglages perso dans les modèles de Winarchy ---------------------------------

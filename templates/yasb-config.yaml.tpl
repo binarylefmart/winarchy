@@ -319,16 +319,16 @@ widgets:
         on_middle: "toggle_label"
         on_right: "cycle_status"
 
-  # Historique du presse-papiers (perso, setup-winarchy.ps1) -> Ditto.
+  # Historique du presse-papiers (perso, setup-winarchy.ps1) -> Win+V.
   tool_clipboard:
     type: "yasb.custom.CustomWidget"
     options:
       label: "<span></span>"
       class_name: "tool-widget"
       tooltip: true
-      tooltip_label: "Presse-papiers (Ditto)"
+      tooltip_label: "Presse-papiers (Win+V)"
       callbacks:
-        on_left: "exec cmd.exe /c %USERPROFILE%\\.winarchy-perso\\ditto-historique.ahk"
+        on_left: "exec cmd.exe /c %USERPROFILE%\\.winarchy-perso\\presse-papiers.ahk"
         on_middle: "do_nothing"
         on_right: "do_nothing"
   tool_region:

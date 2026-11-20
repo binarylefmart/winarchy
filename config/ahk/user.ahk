@@ -1,14 +1,5 @@
 ; Surcharges perso de Winarchy (non suivi par git, survit aux mises a jour).
 
-ToggleClaudeDesktop() {
-    if WinActive('ahk_exe Claude.exe')
-        WinClose('ahk_exe Claude.exe')            ; se replie dans la zone de notification
-    else if WinExist('ahk_exe Claude.exe')
-        WinActivate('ahk_exe Claude.exe')
-    else
-        Run('explorer.exe shell:AppsFolder\Claude_pzs8sxrjxfjjc!Claude')
-}
-
 ; >>> raccourcis-perso (setup-winarchy.ps1) >>>
 ; Bloc réécrit à chaque lancement de setup-winarchy.ps1 : modifie plutôt
 ; le script, sinon tes changements sautent. Le #HotIf toujours vrai fait passer ces
@@ -100,17 +91,32 @@ PersoKomorebic(cmd) {
     RunWait('"' KomorebicExe '" ' cmd, , 'Hide')
 }
 
+; État complet de komorebi (lève une erreur s'il est illisible). Le document HTML qui
+; fournit le parseur JSON est gardé : les objets rendus en dépendent.
+PersoEtat() {
+    global KomorebicExe
+    static doc := 0
+    if !doc {
+        doc := ComObject('htmlfile')
+        doc.write('<meta http-equiv="X-UA-Compatible" content="IE=edge">')
+    }
+    tmp := A_Temp '\winarchy-perso-state.json'
+    RunWait(A_ComSpec ' /c ""' KomorebicExe '" state > "' tmp '""', , 'Hide')
+    return doc.parentWindow.JSON.parse(FileRead(tmp))
+}
+
+; Barres, bureau et YASB : jamais déplacés ni réduits.
+PersoIgnoree(h) {
+    return WinGetClass('ahk_id ' h) ~= '^(Progman|WorkerW|Shell_TrayWnd|Shell_SecondaryTrayWnd)$'
+        || WinGetProcessName('ahk_id ' h) = 'yasb.exe'
+}
+
 ; Super+F : une seule fenêtre en tuile -> bascule centrée / pleine largeur (bureau actif) ;
 ; plusieurs -> monocle. Si le monocle est déjà actif, Super+F le quitte.
 PersoPlein() {
-    global KomorebicExe
     static coupe := Map()   ; bureaux dont Super+F a coupé le centrage pour le monocle
-    tmp := A_Temp '\winarchy-perso-state.json'
     try {
-        RunWait(A_ComSpec ' /c ""' KomorebicExe '" state > "' tmp '""', , 'Hide')
-        doc := ComObject('htmlfile')
-        doc.write('<meta http-equiv="X-UA-Compatible" content="IE=edge">')
-        state := doc.parentWindow.JSON.parse(FileRead(tmp))
+        state := PersoEtat()
         im := state.monitors.focused
         m := state.monitors.elements.%im%
         iw := m.workspaces.focused
@@ -168,14 +174,9 @@ PersoFenetreApp(h) {
 ; les tailles changées à la main repartent à parts égales. Les fenêtres d'application que
 ; komorebi ne gérait pas sont aussi reprises.
 PersoToutTiler() {
-    global KomorebicExe
     actif := WinExist('A')
-    tmp := A_Temp '\winarchy-perso-state.json'
     try {
-        RunWait(A_ComSpec ' /c ""' KomorebicExe '" state > "' tmp '""', , 'Hide')
-        doc := ComObject('htmlfile')
-        doc.write('<meta http-equiv="X-UA-Compatible" content="IE=edge">')
-        state := doc.parentWindow.JSON.parse(FileRead(tmp))
+        state := PersoEtat()
         im := state.monitors.focused
         m := state.monitors.elements.%im%
         iw := m.workspaces.focused
@@ -246,20 +247,12 @@ PersoToutTiler() {
 ;   → encore = moitié droite. Pareil en vertical avec ↑ / ↓.
 ; (Échanger deux tuiles reste sur Super+Shift+flèches.)
 PersoPlace(dir) {
-    global KomorebicExe
     static pos := Map()   ; hwnd -> [col, ligne, x, y, l, h] ; col/ligne : 0 début, 1 plein, 2 fin
     h := WinExist('A')
-    if !h
+    if !h || PersoIgnoree(h)
         return
-    if WinGetClass('ahk_id ' h) ~= '^(Progman|WorkerW|Shell_TrayWnd|Shell_SecondaryTrayWnd)$'
-        || WinGetProcessName('ahk_id ' h) = 'yasb.exe'
-        return
-    tmp := A_Temp '\winarchy-perso-state.json'
     try {
-        RunWait(A_ComSpec ' /c ""' KomorebicExe '" state > "' tmp '""', , 'Hide')
-        doc := ComObject('htmlfile')
-        doc.write('<meta http-equiv="X-UA-Compatible" content="IE=edge">')
-        state := doc.parentWindow.JSON.parse(FileRead(tmp))
+        state := PersoEtat()
         im := state.monitors.focused
         m := state.monitors.elements.%im%
         iw := m.workspaces.focused
@@ -371,10 +364,7 @@ PersoCache() {
     liste := PersoCachees()
     PersoNettoie(liste)
     h := WinExist('A')
-    if !h
-        return
-    if WinGetClass('ahk_id ' h) ~= '^(Progman|WorkerW|Shell_TrayWnd|Shell_SecondaryTrayWnd)$'
-        || WinGetProcessName('ahk_id ' h) = 'yasb.exe'
+    if !h || PersoIgnoree(h)
         return
     for x in liste
         if x = h
@@ -431,17 +421,23 @@ PersoClaudeFenetre(perso) {
     return 0
 }
 
-; Super+Ctrl+Alt+Shift+Entrée. Ouvre / affiche / replie, comme Super+Ctrl+Shift+Backspace pour la pro. Fenêtre repliée
-; dans la zone de notification : relancer la commande la fait réapparaître.
-PersoClaudePerso() {
-    hwnd := PersoClaudeFenetre(true)
+; Ouvre / affiche / replie une instance de Claude Desktop. Repliée, elle part dans la zone
+; de notification : relancer le raccourci la fait réapparaître.
+PersoClaudeOuvre(hwnd, lancer) {
     if (hwnd && WinActive(hwnd))
         WinClose(hwnd)
     else if hwnd
         WinActivate(hwnd)
     else
-        Run('"' EnvGet('LOCALAPPDATA') '\Microsoft\WindowsApps\claude-desktop.exe" --user-data-dir="' EnvGet('APPDATA') '\Claude-perso"')
+        Run(lancer)
 }
+
+; Super+Ctrl+Shift+Backspace : instance pro (l'instance perso est ignorée).
+PersoClaudeBascule() => PersoClaudeOuvre(PersoClaudeFenetre(false), 'explorer.exe shell:AppsFolder\Claude_pzs8sxrjxfjjc!Claude')
+
+; Super+Ctrl+Alt+Shift+Entrée : instance perso.
+PersoClaudePerso() => PersoClaudeOuvre(PersoClaudeFenetre(true)
+    , '"' EnvGet('LOCALAPPDATA') '\Microsoft\WindowsApps\claude-desktop.exe" --user-data-dir="' EnvGet('APPDATA') '\Claude-perso"')
 
 ; Outlook classique (OUTLOOK.EXE), pas le nouvel Outlook (olk.exe).
 PersoOutlook() {
@@ -450,16 +446,6 @@ PersoOutlook() {
     try Run('outlook.exe')                        ; App Paths -> Office16\OUTLOOK.EXE
     catch
         Run('https://outlook.office.com/mail/')
-}
-
-PersoClaudeBascule() {                            ; instance pro (l'instance perso est ignorée)
-    hwnd := PersoClaudeFenetre(false)
-    if (hwnd && WinActive(hwnd))
-        WinClose(hwnd)                            ; se replie dans la zone de notification
-    else if hwnd
-        WinActivate(hwnd)
-    else
-        Run('explorer.exe shell:AppsFolder\Claude_pzs8sxrjxfjjc!Claude')
 }
 
 PersoDeezer() {

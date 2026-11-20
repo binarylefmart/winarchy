@@ -1,0 +1,48 @@
+# Preferencias de ubicación de ventanas de ESTA máquina.
+# Se captura con `winarchy layout save` y se reproduce con `winarchy layout apply`.
+# El monitor va por device_id porque el índice cambia al reconectar pantallas.
+# `pin = true` fija la ventana permanentemente en vez de solo al abrirla.
+# `slot` es la posición del tile dentro del workspace (0 = el primero); solo se guarda y
+# se aplica en apps con `pin = true`. El resto se ubica al abrir y nadie las reordena.
+
+[[windows]]
+exe = "brave.exe"
+monitor = "LHC3400-5&fbc97de&0&UID41219"
+workspace = 0
+workspace_name = "1"
+
+[[windows]]
+exe = "claude.exe"
+monitor = "LHC3400-5&fbc97de&0&UID41219"
+workspace = 1
+workspace_name = "2"
+
+[[windows]]
+exe = "ms-teams.exe"
+monitor = "LHC3400-5&fbc97de&0&UID41219"
+workspace = 2
+workspace_name = "3"
+
+[[windows]]
+exe = "ncplayer.exe"
+monitor = "LHC3400-5&fbc97de&0&UID41219"
+workspace = 0
+workspace_name = "1"
+
+[[windows]]
+exe = "Notepad.exe"
+monitor = "LHC3400-5&fbc97de&0&UID41219"
+workspace = 3
+workspace_name = "4"
+
+[[windows]]
+exe = "OUTLOOK.EXE"
+monitor = "LHC3400-5&fbc97de&0&UID41219"
+workspace = 1
+workspace_name = "2"
+
+[[windows]]
+exe = "WhatsApp.Root.exe"
+monitor = "LHC3400-5&fbc97de&0&UID41219"
+workspace = 2
+workspace_name = "3"

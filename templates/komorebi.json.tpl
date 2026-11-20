@@ -40,17 +40,19 @@
   },
   "monitors": [
     {
+      "window_based_work_area_offset": { "left": 860, "top": 0, "right": 1720, "bottom": 0 },
+      "window_based_work_area_offset_limit": 1,
       "workspaces": [
-        { "name": "1", "layout": "BSP" },
-        { "name": "2", "layout": "BSP" },
-        { "name": "3", "layout": "BSP" },
-        { "name": "4", "layout": "BSP" },
-        { "name": "5", "layout": "BSP" },
-        { "name": "6", "layout": "BSP" },
-        { "name": "7", "layout": "BSP" },
-        { "name": "8", "layout": "BSP" },
-        { "name": "9", "layout": "BSP" },
-        { "name": "10", "layout": "BSP" }
+        { "name": "1", "layout": "BSP", "apply_window_based_work_area_offset": false },
+        { "name": "2", "layout": "BSP", "apply_window_based_work_area_offset": false },
+        { "name": "3", "layout": "BSP", "apply_window_based_work_area_offset": false },
+        { "name": "4", "layout": "BSP", "apply_window_based_work_area_offset": false },
+        { "name": "5", "layout": "BSP", "apply_window_based_work_area_offset": false },
+        { "name": "6", "layout": "BSP", "apply_window_based_work_area_offset": false },
+        { "name": "7", "layout": "BSP", "apply_window_based_work_area_offset": false },
+        { "name": "8", "layout": "BSP", "apply_window_based_work_area_offset": false },
+        { "name": "9", "layout": "BSP", "apply_window_based_work_area_offset": false },
+        { "name": "10", "layout": "BSP", "apply_window_based_work_area_offset": false }
       ]
     },
     {

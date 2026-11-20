@@ -380,7 +380,7 @@ widgets:
       widgets: ["tool_region", "tool_record", "tool_stop", "tool_ocr", "tool_qr", "tool_color", "dnd", "brightness", "power_plan"]
       hide_empty: false
       collapse_options:
-        enabled: true
+        enabled: false
         label_position: "left"
         collapsed_label: "▸"
         expanded_label: "◂"
@@ -389,10 +389,10 @@ widgets:
     type: "yasb.grouper.GrouperWidget"
     options:
       class_name: "ai-grouper"
-      widgets: ["claude_usage", "codex_usage"]
+      widgets: ["claude_usage"]
       hide_empty: false
       collapse_options:
-        enabled: true
+        enabled: false
         label_position: "left"
         collapsed_label: "󰚩"
         expanded_label: "◂"
@@ -404,7 +404,7 @@ widgets:
       widgets: ["gpu", "cpu", "memory"]
       hide_empty: false
       collapse_options:
-        enabled: true
+        enabled: false
         label_position: "left"
         collapsed_label: "󰍛"
         expanded_label: "◂"
@@ -416,7 +416,7 @@ widgets:
       widgets: ["wifi", "bluetooth", "microphone"]
       hide_empty: false
       collapse_options:
-        enabled: true
+        enabled: false
         label_position: "left"
         collapsed_label: "󰖩"
         expanded_label: "◂"

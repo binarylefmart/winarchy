@@ -1040,14 +1040,17 @@ function Edit-ModeleYasbStyles([string]$t) {
 }
 '@ + "`n") -replace '\r?\n', $nl
     }
-    # Icônes disques : locaux = couleur système (comme CPU/mémoire), réseau = couleur réseau.
-    if ($t -notmatch '\.disques-widget') {
-        $t = ($t.TrimEnd() + "`n`n" + @'
-/* Disques (perso, setup-winarchy.ps1) : locaux = couleur système, réseau = couleur réseau */
-.disques-widget .label { color: {{ui.system}}; }
+    # Icônes disques : locaux = couleur par défaut, réseau = couleur réseau ; widgets des groupes
+    # espacés (2 px d'origine : tout collé). Bloc reconstruit à chaque passage.
+    $t = [regex]::Replace($t, '(?ms)\r?\n\r?\n/\* Disques \(perso, setup-winarchy\.ps1\).*?(?=\r?\n\r?\n|\s*\z)', '')
+    $t = ($t.TrimEnd() + "`n`n" + @'
+/* Disques (perso, setup-winarchy.ps1) : réseau = couleur réseau ; widgets des groupes espacés */
 .disques-reseau-widget .label { color: {{ui.net}}; }
+.extras-grouper .widget,
+.ai-grouper .widget,
+.system-grouper .widget,
+.connections-grouper .widget { padding: 0 6px; }
 '@ + "`n") -replace '\r?\n', $nl
-    }
     if ($t -match '\.taskbar-widget') { return $t }
     ($t.TrimEnd() + "`n`n" + @'
 /* Fenêtres ouvertes (perso, setup-winarchy.ps1) */

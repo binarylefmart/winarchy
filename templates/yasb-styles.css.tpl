@@ -594,6 +594,9 @@
     font-size: 12px;
 }
 
-/* Disques (perso, setup-winarchy.ps1) : locaux = couleur système, réseau = couleur réseau */
-.disques-widget .label { color: {{ui.system}}; }
+/* Disques (perso, setup-winarchy.ps1) : réseau = couleur réseau ; widgets des groupes espacés */
 .disques-reseau-widget .label { color: {{ui.net}}; }
+.extras-grouper .widget,
+.ai-grouper .widget,
+.system-grouper .widget,
+.connections-grouper .widget { padding: 0 6px; }

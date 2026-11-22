@@ -889,6 +889,31 @@ function Edit-ModeleYasb([string]$t) {
 '@).Replace('ICONE', [string][char]0xF0EA) -replace '\r?\n', $(if ($t -match "`r`n") { "`r`n" } else { "`n" })
         $t = [regex]::Replace($t, '(?m)^(?=  tool_region:)', $bloc.Replace('$', '$$'), 1)
     }
+    # Corbeille (widget natif YASB), juste après le bouton presse-papiers.
+    if ($t -notmatch '(?m)^  recycle_bin:') {
+        if ($t -notmatch '"tool_clipboard", ' -or $t -notmatch '(?m)^  tool_region:') { throw 'ancre recycle_bin absente' }
+        $t = $t.Replace('"tool_clipboard", ', '"tool_clipboard", "recycle_bin", ')
+        $bloc = (@'
+  # Corbeille (perso, setup-winarchy.ps1) : clic = ouvrir, milieu = nombre/taille, droit = vider.
+  recycle_bin:
+    type: "yasb.recycle_bin.RecycleBinWidget"
+    options:
+      label: "<span>{icon}</span>"
+      label_alt: "<span>{icon}</span> {items_count} ({items_size})"
+      class_name: "tool-widget"
+      icons:
+        bin_empty: "VIDE"
+        bin_filled: "PLEINE"
+      tooltip: true
+      show_confirmation: true
+      callbacks:
+        on_left: "open_bin"
+        on_middle: "toggle_label"
+        on_right: "empty_bin"
+
+'@).Replace('VIDE', [string][char]0xF014).Replace('PLEINE', [string][char]0xF1F8) -replace '\r?\n', $(if ($t -match "`r`n") { "`r`n" } else { "`n" })
+        $t = [regex]::Replace($t, '(?m)^(?=  tool_region:)', $bloc.Replace('$', '$$'), 1)
+    }
     # Indicateur des fenêtres ouvertes (icônes cliquables) après l'icône de layout.
     if ($t -notmatch 'yasb\.taskbar\.TaskbarWidget') {
         if ($t -notmatch '"komorebi_active_layout", ' -or $t -notmatch '(?m)^  komorebi_workspaces:') { throw 'ancre taskbar absente' }
@@ -989,8 +1014,18 @@ function Set-ReglagesWinarchy([string]$Root) {
 function Update-ThemeActif([string]$Root) {
     $theme = Get-ThemeActif $Root
     if (-not $theme) { Warn 'Thème actif introuvable : lance « winarchy theme set <thème> » pour appliquer.'; return }
+    # `theme set` remet le fond du thème : on garde celui choisi par l'utilisateur s'il
+    # n'est pas un fond Winarchy (themes\<thème>\backgrounds).
+    $fond = (Get-ItemProperty 'HKCU:\Control Panel\Desktop' -Name WallPaper -ErrorAction SilentlyContinue).WallPaper
     if (Invoke-WinarchyCli $Root @('theme', 'set', $theme)) { Ok "Thème « $theme » réappliqué" }
     else { Warn "« winarchy theme set $theme » a échoué" }
+    if ($fond -and (Test-Path $fond) -and -not $fond.StartsWith((Join-Path $Root 'themes'), [StringComparison]::OrdinalIgnoreCase)) {
+        if (-not ('PersoWinarchy.SpiFond' -as [type])) {
+            Add-Type -Namespace PersoWinarchy -Name SpiFond -MemberDefinition '[DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern bool SystemParametersInfo(uint a, uint b, string v, uint c);'
+        }
+        [void][PersoWinarchy.SpiFond]::SystemParametersInfo(0x14, 0, $fond, 3)   # SPI_SETDESKWALLPAPER
+        Ok "Fond d'écran perso conservé : $(Split-Path $fond -Leaf)"
+    }
 }
 
 # --- Fork : remotes, mise à jour, sauvegarde ----------------------------------------

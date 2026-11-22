@@ -331,6 +331,22 @@ widgets:
         on_left: "exec cmd.exe /c %USERPROFILE%\\.winarchy-perso\\presse-papiers.ahk"
         on_middle: "do_nothing"
         on_right: "do_nothing"
+  # Corbeille (perso, setup-winarchy.ps1) : clic = ouvrir, milieu = nombre/taille, droit = vider.
+  recycle_bin:
+    type: "yasb.recycle_bin.RecycleBinWidget"
+    options:
+      label: "<span>{icon}</span>"
+      label_alt: "<span>{icon}</span> {items_count} ({items_size})"
+      class_name: "tool-widget"
+      icons:
+        bin_empty: ""
+        bin_filled: ""
+      tooltip: true
+      show_confirmation: true
+      callbacks:
+        on_left: "open_bin"
+        on_middle: "toggle_label"
+        on_right: "empty_bin"
   tool_region:
     type: "yasb.custom.CustomWidget"
     options:
@@ -407,7 +423,7 @@ widgets:
     type: "yasb.grouper.GrouperWidget"
     options:
       class_name: "extras-grouper"
-      widgets: ["tool_region", "tool_clipboard", "tool_ocr", "tool_qr", "tool_color", "dnd", "brightness", "power_plan"]
+      widgets: ["tool_region", "tool_clipboard", "recycle_bin", "tool_ocr", "tool_qr", "tool_color", "dnd", "brightness", "power_plan"]
       hide_empty: false
       collapse_options:
         enabled: false

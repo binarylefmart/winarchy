@@ -847,37 +847,51 @@ PersoSurveilleSurvol() {
     DllCall('SystemParametersInfo', 'UInt', 0x2003, 'UInt', 0, 'Ptr', 150, 'UInt', 3)  ; après 150 ms
 }
 
-; --- Fenêtres « Propriétés » de l'Explorateur centrées ---------------------------
-; komorebi refuse de les tuiler (fenêtre attachée à l'Explorateur, taille fixe) : à leur
-; ouverture, on les centre une seule fois sur leur écran (déplaçables ensuite), toujours au-dessus.
-SetTimer(PersoCentreProprietes, 250)
-PersoCentreProprietes() {
+; --- Boîtes de dialogue toujours devant ------------------------------------------
+; Le focus au survol remonte les tuiles devant les boîtes de dialogue (confirmation de
+; suppression, remplacement de fichier, Propriétés...) : à leur apparition, on les met
+; au-dessus jusqu'à leur fermeture et on les active. Seulement les fenêtres #32770
+; RATTACHÉES à une autre (vraies boîtes de dialogue, pas les fenêtres principales de
+; vieilles applis). La progression de copie/suppression de l'Explorateur reste devant
+; sans voler le focus. Les « Propriétés » de l'Explorateur sont en plus centrées
+; (komorebi refuse de les tuiler) ; toutes restent déplaçables.
+SetTimer(PersoDialoguesDevant, 250)
+PersoDialoguesDevant() {
     static vues := Map()
-    for hwnd in WinGetList('ahk_class #32770 ahk_exe explorer.exe') {
+    for hwnd in WinGetList('ahk_class #32770') {
         if vues.Has(hwnd)
             continue
+        vues[hwnd] := 1
         try {
-            if !InStr(WinGetTitle(hwnd), 'Propriétés') && !InStr(WinGetTitle(hwnd), 'Properties')
+            if !DllCall('GetWindow', 'Ptr', hwnd, 'UInt', 4, 'Ptr')     ; GW_OWNER : pas rattachée
                 continue
-            vues[hwnd] := 1
-            WinGetPos(&x, &y, &l, &h, hwnd)
-            ; écran qui contient le centre de la fenêtre (sinon l'écran principal)
-            ecran := MonitorGetPrimary()
-            Loop MonitorGetCount() {
-                MonitorGet(A_Index, &g, &t, &d, &b)
-                if (x + l // 2 >= g && x + l // 2 < d && y + h // 2 >= t && y + h // 2 < b)
-                    ecran := A_Index
-            }
-            MonitorGetWorkArea(ecran, &g, &t, &d, &b)
-            WinMove(g + (d - g - l) // 2, t + (b - t - h) // 2, , , hwnd)
-            ; Toujours au-dessus : sinon le focus au survol remonte les tuiles devant elle.
+            titre := WinGetTitle(hwnd)
+            if (WinGetProcessName(hwnd) = 'explorer.exe' && (InStr(titre, 'Propriétés') || InStr(titre, 'Properties')))
+                PersoCentre(hwnd)
             WinSetAlwaysOnTop(1, hwnd)
             WinActivate(hwnd)
         }
     }
+    for hwnd in WinGetList('ahk_class OperationStatusWindow') {
+        if vues.Has(hwnd)
+            continue
+        vues[hwnd] := 1
+        try WinSetAlwaysOnTop(1, hwnd)
+    }
     for hwnd in [vues*]                              ; oublie les fenêtres fermées
         if !WinExist(hwnd)
             vues.Delete(hwnd)
+}
+PersoCentre(hwnd) {
+    WinGetPos(&x, &y, &l, &h, hwnd)
+    ecran := MonitorGetPrimary()                     ; écran qui contient le centre de la fenêtre
+    Loop MonitorGetCount() {
+        MonitorGet(A_Index, &g, &t, &d, &b)
+        if (x + l // 2 >= g && x + l // 2 < d && y + h // 2 >= t && y + h // 2 < b)
+            ecran := A_Index
+    }
+    MonitorGetWorkArea(ecran, &g, &t, &d, &b)
+    WinMove(g + (d - g - l) // 2, t + (b - t - h) // 2, , , hwnd)
 }
 ; <<< raccourcis-perso <<<
 '@

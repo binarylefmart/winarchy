@@ -1022,8 +1022,22 @@ function Edit-ModeleYasb([string]$t) {
 
 # Styles de l'indicateur des fenêtres ouvertes (fenêtre active soulignée de l'accent).
 function Edit-ModeleYasbStyles([string]$t) {
-    if ($t -match '\.taskbar-widget') { return $t }
     $nl = if ($t -match "`r`n") { "`r`n" } else { "`n" }
+    # Bulles d'aide (survol) : fond opaque comme le panneau Claude Usage (sinon transparentes).
+    if ($t -notmatch '(?m)^\.tooltip\s*\{') {
+        $t = ($t.TrimEnd() + "`n`n" + @'
+/* Bulles d'aide (perso, setup-winarchy.ps1) : fond opaque, lisible */
+.tooltip {
+    background-color: {{colors.background}};
+    border: 1px solid {{colors.color8}};
+    border-radius: 6px;
+    color: {{colors.foreground}};
+    padding: 6px 10px;
+    font-size: 12px;
+}
+'@ + "`n") -replace '\r?\n', $nl
+    }
+    if ($t -match '\.taskbar-widget') { return $t }
     ($t.TrimEnd() + "`n`n" + @'
 /* Fenêtres ouvertes (perso, setup-winarchy.ps1) */
 .taskbar-widget { padding: 0 4px; }

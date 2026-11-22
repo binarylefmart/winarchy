@@ -583,3 +583,13 @@
 .taskbar-widget .app-container:hover { background-color: {{colors.color8}}; }
 .taskbar-widget .app-container.foreground { border-bottom: 2px solid {{ui.accent}}; }
 .taskbar-widget .app-container.flashing { background-color: {{colors.accent_ui}}; }
+
+/* Bulles d'aide (perso, setup-winarchy.ps1) : fond opaque, lisible */
+.tooltip {
+    background-color: {{colors.background}};
+    border: 1px solid {{colors.color8}};
+    border-radius: 6px;
+    color: {{colors.foreground}};
+    padding: 6px 10px;
+    font-size: 12px;
+}

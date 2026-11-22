@@ -1172,7 +1172,19 @@ function Update-ThemeActif([string]$Root) {
         }
         [void][PersoWinarchy.SpiFond]::SystemParametersInfo(0x14, 0, $fond, 3)   # SPI_SETDESKWALLPAPER
         Ok "Fond d'écran perso conservé : $(Split-Path $fond -Leaf)"
+        # `theme set` remet aussi l'écran de verrouillage du thème : même image que le bureau.
+        # (Le flou de l'écran de connexion est celui de Windows : transparence activée.)
+        Set-VerrouillagePerso $Root $fond
     }
+}
+
+# Écran de verrouillage = image donnée (via la fonction de Winarchy, WinRT, sans admin).
+function Set-VerrouillagePerso([string]$Root, [string]$Image) {
+    try {
+        $m = Import-Module (Join-Path $Root 'module\Winarchy\Winarchy.psm1') -PassThru -Force -ErrorAction Stop
+        & $m { param($i) Set-WinarchyLockScreen -ImagePath $i } $Image
+        Ok "Écran de verrouillage : $(Split-Path $Image -Leaf)"
+    } catch { Warn "Écran de verrouillage non modifié : $($_.Exception.Message)" }
 }
 
 # --- Fork : remotes, mise à jour, sauvegarde ----------------------------------------

@@ -76,57 +76,72 @@ $ModelesPatches = @('templates\komorebi.json.tpl', 'templates\yasb-config.yaml.t
 
 # Corps de ~\.winarchy-perso\devant.ahk (voir Write-DevantScript).
 $script:CorpsDevant = @'
-; --- Boîtes de dialogue et installeurs toujours devant --------------------------
-; Le focus au survol remonte les tuiles devant les boîtes de dialogue (confirmation de
-; suppression, remplacement de fichier, Propriétés...) : à leur apparition, on les met
-; au-dessus jusqu'à leur fermeture et on les active. Fenêtres #32770 RATTACHÉES à une
-; autre (vraies boîtes de dialogue, pas les fenêtres principales de vieilles applis), et
-; TOUTES celles de l'Explorateur (« Supprimer plusieurs éléments » n'est rattachée à
-; rien). La progression de copie/suppression de l'Explorateur reste devant
-; sans voler le focus. Les installeurs aussi (voir PersoEstInstalleur). Les « Propriétés » de l'Explorateur sont en plus centrées
-; (komorebi refuse de les tuiler) ; toutes restent déplaçables.
-SetTimer(PersoDialoguesDevant, 250)
-PersoDialoguesDevant() {
-    static vues := Map()                             ; hwnd -> 1 suivie (garder devant), 0 ignorée
+; --- Fenêtres flottantes toujours devant -----------------------------------------
+; Le focus au survol remonte les tuiles par-dessus tout ce que komorebi ne tuile pas.
+; Règle par défaut : toute fenêtre que komorebi ne tuile pas passe au-dessus jusqu'à sa
+; fermeture (notifications, popups, désinstalleurs…), sans voler le focus. Exclus :
+; plein écran, maximisées, réduites, minuscules, jeux de games.toml, éléments système.
+; Une fenêtre que komorebi finit par tuiler redevient normale.
+; Cas particuliers, traités tout de suite :
+;  - boîtes de dialogue #32770 RATTACHÉES à une autre, TOUTES celles de l'Explorateur
+;    (« Supprimer plusieurs éléments » n'est rattachée à rien) et installeurs /
+;    désinstalleurs (PersoEstInstalleur) : devant ET activées ; les « Propriétés » de
+;    l'Explorateur sont en plus centrées ;
+;  - progression de copie de l'Explorateur, popups Steam, rappels Outlook : devant.
+global PersoVues := Map()      ; hwnd -> 0 ignorée, 1 devant, 2 flottante devant (tant que non tuilée)
+global PersoAttente := Map()   ; hwnd -> A_TickCount de première vue (laisse komorebi la prendre)
+SetTimer(PersoDevant, 250)
+PersoDevant() {
+    static dernierControle := 0
     for hwnd in WinGetList() {
-        if vues.Has(hwnd)
+        if (PersoVues.Has(hwnd) || PersoAttente.Has(hwnd))
             continue
-        vues[hwnd] := 0
-        try {
-            classe := WinGetClass(hwnd)
-            if (classe = 'OperationStatusWindow') {
-                vues[hwnd] := 1                          ; progression : devant, sans focus
+        PersoVues[hwnd] := 0
+        try PersoClasse(hwnd)
+    }
+    ; Fenêtres vues depuis plus d'1 s : si komorebi ne les a pas tuilées, devant.
+    if PersoAttente.Count {
+        tuilees := ''
+        for hwnd, debut in PersoAttente.Clone() {
+            if (A_TickCount - debut < 1000)
                 continue
-            }
-            if (WinGetExStyle(hwnd) & 0x80)              ; WS_EX_TOOLWINDOW : pas une vraie fenêtre
-                continue
-            if PersoEstNotification(hwnd, classe) {      ; notification : devant, sans focus
-                vues[hwnd] := 1
+            PersoAttente.Delete(hwnd)
+            PersoVues[hwnd] := 0
+            try {
+                if !PersoFlottanteEligible(hwnd)
+                    continue
+                if (tuilees = '')
+                    tuilees := PersoTuilees()
+                if PersoEstTuilee(tuilees, hwnd)
+                    continue
+                PersoVues[hwnd] := 2
                 WinSetAlwaysOnTop(1, hwnd)
-                continue
             }
-            installeur := PersoEstInstalleur(hwnd, classe)
-            if (classe != '#32770' && !installeur)
+        }
+    }
+    ; Toutes les 2 s : une flottante que komorebi a fini par tuiler redevient normale.
+    if (A_TickCount - dernierControle > 2000) {
+        dernierControle := A_TickCount
+        tuilees := ''
+        for hwnd, etat in PersoVues.Clone() {
+            if (etat != 2)
                 continue
-            explorateur := (WinGetProcessName(hwnd) = 'explorer.exe')
-            if (!installeur && !explorateur && !DllCall('GetWindow', 'Ptr', hwnd, 'UInt', 4, 'Ptr'))   ; GW_OWNER : pas rattachée
-                continue
-            vues[hwnd] := 1
-            titre := WinGetTitle(hwnd)
-            if (explorateur && (InStr(titre, 'Propriétés') || InStr(titre, 'Properties')))
-                PersoCentre(hwnd)
-            WinSetAlwaysOnTop(1, hwnd)
-            WinActivate(hwnd)
+            if (tuilees = '')
+                tuilees := PersoTuilees()
+            if (tuilees != '*' && PersoEstTuilee(tuilees, hwnd)) {
+                PersoVues[hwnd] := 0
+                try WinSetAlwaysOnTop(0, hwnd)
+            }
         }
     }
     ; À chaque passage : oublie les fenêtres fermées, et remet devant (sans focus) celles
     ; qui ont perdu le « toujours au-dessus » (le premier réglage ne tient pas toujours).
-    for hwnd, suivie in vues.Clone() {
+    for hwnd, etat in PersoVues.Clone() {
         if !WinExist(hwnd) {
-            vues.Delete(hwnd)
+            PersoVues.Delete(hwnd)
             continue
         }
-        if !suivie
+        if !etat
             continue
         try {
             if !(WinGetExStyle(hwnd) & 0x8)                  ; WS_EX_TOPMOST
@@ -134,9 +149,101 @@ PersoDialoguesDevant() {
         }
     }
 }
-; Notifications que komorebi ignore et qui passaient derrière les tuiles : popups de
-; Steam (toutes ses fenêtres sauf la principale « Steam » : offres spéciales, toasts,
-; amis…) et rappels Outlook. Mises devant sans voler le focus.
+PersoClasse(hwnd) {
+    classe := WinGetClass(hwnd)
+    if (classe = 'OperationStatusWindow') {
+        PersoVues[hwnd] := 1                         ; progression : devant, sans focus
+        return
+    }
+    if (WinGetExStyle(hwnd) & 0x80)                  ; WS_EX_TOOLWINDOW : pas une vraie fenêtre
+        return
+    if PersoEstNotification(hwnd, classe) {          ; notification : devant, sans focus
+        PersoVues[hwnd] := 1
+        WinSetAlwaysOnTop(1, hwnd)
+        return
+    }
+    installeur := PersoEstInstalleur(hwnd, classe)
+    explorateur := (WinGetProcessName(hwnd) = 'explorer.exe')
+    if (installeur || (classe = '#32770' && (explorateur || DllCall('GetWindow', 'Ptr', hwnd, 'UInt', 4, 'Ptr')))) {
+        PersoVues[hwnd] := 1
+        titre := WinGetTitle(hwnd)
+        if (explorateur && (InStr(titre, 'Propriétés') || InStr(titre, 'Properties')))
+            PersoCentre(hwnd)
+        WinSetAlwaysOnTop(1, hwnd)
+        WinActivate(hwnd)
+        return
+    }
+    PersoVues.Delete(hwnd)                           ; candidate flottante : décision dans 1 s
+    PersoAttente[hwnd] := A_TickCount
+}
+PersoFlottanteEligible(hwnd) {
+    static classes := '|Progman|WorkerW|Shell_TrayWnd|Shell_SecondaryTrayWnd|#32768|tooltips_class32|Windows.UI.Core.CoreWindow|XamlExplorerHostIslandWindow|TopLevelWindowForOverflowXamlIsland|NotifyIconOverflowWindow|MultitaskingViewFrame|ForegroundStaging|TaskListThumbnailWnd|ApplicationManager_ImmersiveShellWindow|'
+    static exes := '|komorebi.exe|komorebic.exe|yasb.exe|Flow.Launcher.exe|ShellExperienceHost.exe|StartMenuExperienceHost.exe|SearchHost.exe|TextInputHost.exe|LockApp.exe|NVIDIA Overlay.exe|ScreenClippingHost.exe|SnippingTool.exe|'
+    if (!WinExist(hwnd) || !DllCall('IsWindowVisible', 'Ptr', hwnd))
+        return false
+    if (WinGetMinMax(hwnd) != 0)                     ; réduite ou maximisée
+        return false
+    if (WinGetExStyle(hwnd) & 0x88)                  ; fenêtre outil, ou déjà au-dessus
+        return false
+    classe := WinGetClass(hwnd)
+    if (InStr(classes, '|' classe '|') || InStr(classe, 'komoborder'))
+        return false
+    exe := WinGetProcessName(hwnd)
+    if (InStr(exes, '|' exe '|') || PersoEstJeu(exe))
+        return false
+    cache := 0
+    DllCall('dwmapi\DwmGetWindowAttribute', 'Ptr', hwnd, 'UInt', 14, 'Int*', &cache, 'UInt', 4)   ; DWMWA_CLOAKED
+    if cache
+        return false
+    WinGetPos(&x, &y, &l, &h, hwnd)
+    if (l < 80 || h < 40)
+        return false
+    MonitorGet(PersoEcran(x, y, l, h), &g, &t, &d, &b)
+    return !(l >= (d - g) * 0.9 && h >= (b - t) * 0.9)   ; quasi plein écran : pas une flottante
+}
+; Jeux de Winarchy (games.toml / games.user.toml) : jamais forcés devant.
+PersoEstJeu(exe) {
+    static jeux := ''
+    if (jeux = '') {
+        jeux := '|'
+        for f in ['C:\winarchy\games.toml', 'C:\winarchy\games.user.toml'] {
+            try {
+                txt := FileRead(f, 'UTF-8')
+                pos := 1
+                while (pos := RegExMatch(txt, 'm)^\s*exe\s*=\s*"([^"]+)"', &m, pos)) {
+                    j := m[1]
+                    jeux .= (RegExMatch(j, 'i)\.exe$') ? j : j '.exe') '|'
+                    pos += m.Len
+                }
+            }
+        }
+    }
+    return InStr(jeux, '|' exe '|')
+}
+; hwnd tuilés par komorebi (« |123|456| »), fenêtres flottantes de komorebi exclues ;
+; « * » si komorebi ne répond pas (alors rien n'est forcé devant).
+PersoTuilees() {
+    f := A_Temp '\perso-komorebi-state.json'
+    try {
+        RunWait(A_ComSpec ' /c komorebic state > "' f '" 2>nul', , 'Hide')
+        txt := FileRead(f, 'UTF-8')
+    } catch
+        return '*'
+    if !InStr(txt, '"monitors"')
+        return '*'
+    res := '|', section := '', pos := 1
+    while (pos := RegExMatch(txt, '"(containers|monocle_container|maximized_window|floating_windows)"|"hwnd":\s*(\d+)', &m, pos)) {
+        if (m[1] != '')
+            section := m[1]
+        else if (section != 'floating_windows')
+            res .= m[2] '|'
+        pos += m.Len
+    }
+    return res
+}
+PersoEstTuilee(tuilees, hwnd) => (tuilees = '*' || InStr(tuilees, '|' hwnd '|'))
+; Notifications que komorebi ignore : popups de Steam (toutes ses fenêtres sauf la
+; principale « Steam ») et rappels Outlook. Devant sans délai, sans voler le focus.
 PersoEstNotification(hwnd, classe) {
     exe := WinGetProcessName(hwnd)
     titre := WinGetTitle(hwnd)
@@ -144,27 +251,30 @@ PersoEstNotification(hwnd, classe) {
         return (titre != 'Steam' && titre != '')
     return (exe = 'OUTLOOK.EXE' && RegExMatch(titre, 'i)^\d+ (rappel|reminder)'))
 }
-; Installeurs (komorebi les ignore, ils passaient derrière les tuiles) : MSI, Inno Setup,
-; WiX, InstallShield par leur classe ; NSIS et les autres par le nom du processus ou le
-; titre (« …Setup.exe », « unins000.exe », « Installation de … »).
+; Installeurs et désinstalleurs : MSI, Inno Setup (installe et désinstalle depuis un
+; « …\is-XXXX.tmp\nom.tmp » ou « _iuXXXX.tmp »), WiX, InstallShield par leur classe ou
+; leur processus ; NSIS et les autres par le nom du processus ou le titre.
 PersoEstInstalleur(hwnd, classe) {
-    static classes := '|MsiDialogCloseClass|MsiDialogNoCloseClass|TWizardForm|TSetupForm|TSelectLanguageForm|TNewDiskForm|WixStdBA|InstallShield_Win|'
+    static classes := '|MsiDialogCloseClass|MsiDialogNoCloseClass|TWizardForm|TSetupForm|TSelectLanguageForm|TNewDiskForm|TUninstallProgressForm|TUninstSharedFileForm|WixStdBA|InstallShield_Win|'
     if InStr(classes, '|' classe '|')
         return true
     exe := WinGetProcessName(hwnd)
-    if RegExMatch(exe, 'i)^(msiexec\.exe|unins\d*\.exe|.*(setup|install|updat).*\.exe)$')
+    if RegExMatch(exe, 'i)^(msiexec\.exe|unins\d*\.exe|.*\.tmp|.*(setup|install|updat).*\.exe)$')
         return true
     return (classe = '#32770' && RegExMatch(WinGetTitle(hwnd), 'i)setup|install|désinstall|uninstall|assistant d|wizard|updat|mise à jour'))
 }
-PersoCentre(hwnd) {
-    WinGetPos(&x, &y, &l, &h, hwnd)
+PersoEcran(x, y, l, h) {
     ecran := MonitorGetPrimary()                     ; écran qui contient le centre de la fenêtre
     Loop MonitorGetCount() {
         MonitorGet(A_Index, &g, &t, &d, &b)
         if (x + l // 2 >= g && x + l // 2 < d && y + h // 2 >= t && y + h // 2 < b)
             ecran := A_Index
     }
-    MonitorGetWorkArea(ecran, &g, &t, &d, &b)
+    return ecran
+}
+PersoCentre(hwnd) {
+    WinGetPos(&x, &y, &l, &h, hwnd)
+    MonitorGetWorkArea(PersoEcran(x, y, l, h), &g, &t, &d, &b)
     WinMove(g + (d - g - l) // 2, t + (b - t - h) // 2, , , hwnd)
 }
 '@

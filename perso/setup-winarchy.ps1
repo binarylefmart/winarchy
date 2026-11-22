@@ -189,24 +189,26 @@ $icReseau = [char]::ConvertFromUtf32(0xF0870)   # nf-md-folder_network
 function Taille([double]$o) { if ($o -ge 1TB) { '{0:0.#} To' -f ($o / 1TB) } else { '{0:0} Go' -f ($o / 1GB) } }
 # Win32_LogicalDisk : un seul appel, borné par un délai (un partage injoignable ne bloque pas).
 $disques = @(Get-CimInstance Win32_LogicalDisk -Filter 'DriveType=3 OR DriveType=4' -OperationTimeoutSec 8 -ErrorAction SilentlyContinue)
-$local = @(); $reseau = @(); $detail = @()
+$local = @(); $reseau = @(); $localLibre = @(); $reseauLibre = @(); $detail = @()
 foreach ($d in ($disques | Sort-Object DeviceID)) {
     $lettre = $d.DeviceID.TrimEnd(':')
     $nom = if ($d.DriveType -eq 4) { "$($d.VolumeName) ($($d.ProviderName))" } else { $d.VolumeName }
     if ($d.Size -gt 0 -and $null -ne $d.FreeSpace) {
         $pct = [int][math]::Round(100 * ($d.Size - $d.FreeSpace) / $d.Size)
-        $court = "$lettre $pct%"
+        $court = "$lettre $pct%"; $libre = "$lettre $(Taille $d.FreeSpace)"
         $detail += "$($d.DeviceID) $nom : $pct % utilisé, $(Taille $d.FreeSpace) libres sur $(Taille $d.Size)"
     } else {
-        $court = "$lettre ?"
+        $court = "$lettre ?"; $libre = "$lettre ?"
         $detail += "$($d.DeviceID) $nom : injoignable"
     }
-    if ($d.DriveType -eq 4) { $reseau += $court } else { $local += $court }
+    if ($d.DriveType -eq 4) { $reseau += $court; $reseauLibre += $libre } else { $local += $court; $localLibre += $libre }
 }
 if (-not $disques) { $detail = @('Disques : lecture impossible (délai dépassé)') }
 [pscustomobject]@{
     local  = "$icLocal " + $(if ($local) { $local -join '  ' } else { '?' })
     reseau = "$icReseau " + $(if ($reseau) { $reseau -join '  ' } else { 'aucun' })
+    local_libre  = "$icLocal " + $(if ($localLibre) { $localLibre -join '  ' } else { '?' })
+    reseau_libre = "$icReseau " + $(if ($reseauLibre) { $reseauLibre -join '  ' } else { 'aucun' })
     detail = $detail -join "`n"
 } | ConvertTo-Json -Compress
 '@
@@ -958,21 +960,22 @@ function Edit-ModeleYasb([string]$t) {
     $t = $t.Replace('"memory", "disk"', '"memory"')
     # Disques : script en arrière-plan (CustomWidget) ; barre = disques locaux en %,
     # bulle = détail de tous les disques (réseau compris), clic droit/milieu = disques réseau.
-    # YASB découpe run_cmd sur les espaces puis Popen réécrit les guillemets : chemin sans guillemets.
-    $t = $t.Replace('-File "%USERPROFILE%\.winarchy-perso\disques.ps1"', '-File %USERPROFILE%\.winarchy-perso\disques.ps1')
-    if ($t -match '(?m)^  disques:' -and $t -notmatch 'label_placeholder: "…"') { $t = [regex]::Replace($t, '(      label_alt: "\{data\[reseau\]\}"\r?\n)', ('${1}      label_placeholder: "…"' + $(if ($t -match "`r`n") { "`r`n" } else { "`n" }))) }
-    if ($t -notmatch '(?m)^  disques:') {
-        if ($t -notmatch '"cpu", "memory"' -or $t -notmatch '(?m)^  memory:') { throw 'ancre disques absente' }
-        $t = $t.Replace('"cpu", "memory"', '"cpu", "memory", "disques"')
-        $bloc = @'
-  # Disques (perso, setup-winarchy.ps1) : barre = locaux en %, survol = détail (réseau compris),
-  # clic = Ce PC, droit/milieu = disques réseau. {data[...]} hors <span> (sinon pas substitué).
-  disques:
+    # Deux icônes toujours visibles : disques locaux (couleur système) et réseau (couleur réseau).
+    # Reconstruites à chaque passage (anciennes versions retirées) pour rester à jour.
+    # YASB découpe run_cmd sur les espaces puis Popen réécrit les guillemets : chemin SANS guillemets.
+    $t = [regex]::Replace($t, '(?m)^  # Disques[^\n]*\n(?:  #[^\n]*\n)*  disques(?:_reseau)?:\r?\n(?:(?:    [^\n]*)?\r?\n)*', '')
+    $t = $t.Replace(', "disques_reseau"', '').Replace(', "disques"', '')
+    if ($t -notmatch '"cpu", "memory"' -or $t -notmatch '(?m)^  memory:') { throw 'ancre disques absente' }
+    $t = $t.Replace('"cpu", "memory"', '"cpu", "memory", "disques", "disques_reseau"')
+    $modele = @'
+  # Disques LIBELLE (perso, setup-winarchy.ps1) : % utilisé, survol = détail de tous les disques,
+  # clic = Ce PC, droit/milieu = espace libre. {data[...]} hors <span> (sinon pas substitué).
+  CLE:
     type: "yasb.custom.CustomWidget"
     options:
-      class_name: "disques-widget"
-      label: "{data[local]}"
-      label_alt: "{data[reseau]}"
+      class_name: "CLASSE"
+      label: "{data[DONNEE]}"
+      label_alt: "{data[DONNEE_libre]}"
       label_placeholder: "…"
       tooltip: true
       tooltip_label: "{data[detail]}"
@@ -986,10 +989,10 @@ function Edit-ModeleYasb([string]$t) {
         on_left: "exec explorer.exe shell:MyComputerFolder"
         on_middle: "toggle_label"
         on_right: "toggle_label"
-
-'@ -replace '\r?\n', $(if ($t -match "`r`n") { "`r`n" } else { "`n" })
-        $t = [regex]::Replace($t, '(?m)^(?=  memory:)', $bloc.Replace('$', '$$'), 1)
-    }
+'@
+    $bloc = ($modele.Replace('LIBELLE', 'locaux').Replace('CLE', 'disques').Replace('CLASSE', 'disques-widget').Replace('DONNEE', 'local') + "`n" +
+             $modele.Replace('LIBELLE', 'réseau').Replace('CLE', 'disques_reseau').Replace('CLASSE', 'disques-reseau-widget').Replace('DONNEE', 'reseau') + "`n") -replace '\r?\n', $(if ($t -match "`r`n") { "`r`n" } else { "`n" })
+    $t = [regex]::Replace($t, '(?m)^(?=  memory:)', $bloc.Replace('$', '$$'), 1)
     # Indicateur des fenêtres ouvertes (icônes cliquables) après l'icône de layout.
     if ($t -notmatch 'yasb\.taskbar\.TaskbarWidget') {
         if ($t -notmatch '"komorebi_active_layout", ' -or $t -notmatch '(?m)^  komorebi_workspaces:') { throw 'ancre taskbar absente' }

@@ -232,14 +232,35 @@ widgets:
         on_left: "toggle_menu"
         on_right: "toggle_label"
 
-  # Disques (perso, setup-winarchy.ps1) : barre = locaux en %, survol = détail (réseau compris),
-  # clic = Ce PC, droit/milieu = disques réseau. {data[...]} hors <span> (sinon pas substitué).
+  # Disques locaux (perso, setup-winarchy.ps1) : % utilisé, survol = détail de tous les disques,
+  # clic = Ce PC, droit/milieu = espace libre. {data[...]} hors <span> (sinon pas substitué).
   disques:
     type: "yasb.custom.CustomWidget"
     options:
       class_name: "disques-widget"
       label: "{data[local]}"
-      label_alt: "{data[reseau]}"
+      label_alt: "{data[local_libre]}"
+      label_placeholder: "…"
+      tooltip: true
+      tooltip_label: "{data[detail]}"
+      exec_options:
+        run_cmd: 'powershell.exe -NoProfile -ExecutionPolicy Bypass -File %USERPROFILE%\.winarchy-perso\disques.ps1'
+        run_interval: 60000
+        return_format: "json"
+        use_shell: true
+        encoding: "utf-8"
+      callbacks:
+        on_left: "exec explorer.exe shell:MyComputerFolder"
+        on_middle: "toggle_label"
+        on_right: "toggle_label"
+  # Disques réseau (perso, setup-winarchy.ps1) : % utilisé, survol = détail de tous les disques,
+  # clic = Ce PC, droit/milieu = espace libre. {data[...]} hors <span> (sinon pas substitué).
+  disques_reseau:
+    type: "yasb.custom.CustomWidget"
+    options:
+      class_name: "disques-reseau-widget"
+      label: "{data[reseau]}"
+      label_alt: "{data[reseau_libre]}"
       label_placeholder: "…"
       tooltip: true
       tooltip_label: "{data[detail]}"
@@ -468,7 +489,7 @@ widgets:
     type: "yasb.grouper.GrouperWidget"
     options:
       class_name: "system-grouper"
-      widgets: ["gpu", "cpu", "memory", "disques"]
+      widgets: ["gpu", "cpu", "memory", "disques", "disques_reseau"]
       hide_empty: false
       collapse_options:
         enabled: false

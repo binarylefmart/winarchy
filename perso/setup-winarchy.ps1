@@ -552,6 +552,19 @@ if ($route) {
     $ipv4 = @($cfg.IPAddress | Where-Object { $_ -match '^\d+\.' })
     $detail += "Adresse IP : $($ipv4 -join ', ')"
     $detail += "Passerelle : $($route.NextHop)"
+    # IP publique (api.ipify.org) : en cache 10 min, redemandée tout de suite si le réseau change.
+    $cache = Join-Path (Split-Path $MyInvocation.MyCommand.Path) 'ip-publique.json'
+    $cle = "$($route.NextHop)|$($ipv4 -join ',')"
+    $pub = $null
+    try { $c = Get-Content $cache -Raw -ErrorAction Stop | ConvertFrom-Json; if ($c.cle -eq $cle -and ((Get-Date) - [datetime]$c.date).TotalMinutes -lt 10) { $pub = $c.ip } } catch {}
+    if (-not $pub) {
+        try {
+            $pub = (Invoke-RestMethod 'https://api.ipify.org' -TimeoutSec 4 -UseBasicParsing).ToString().Trim()
+            if ($pub -notmatch '^[\d.:a-fA-F]+$') { throw 'réponse invalide' }
+            [pscustomobject]@{ cle = $cle; ip = $pub; date = (Get-Date).ToString('o') } | ConvertTo-Json -Compress | Set-Content $cache -Encoding UTF8
+        } catch { $pub = 'indisponible' }
+    }
+    $detail += "IP publique : $pub"
     if ($cfg.DNSServerSearchOrder) { $detail += "DNS : $($cfg.DNSServerSearchOrder -join ', ')" }
     # Débit instantané (le compteur remplace ( ) par [ ] dans le nom de la carte).
     $inst = $cfg.Description.Replace('(', '[').Replace(')', ']')

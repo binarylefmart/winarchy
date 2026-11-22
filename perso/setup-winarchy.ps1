@@ -954,7 +954,7 @@ function Edit-ModeleYasb([string]$t) {
     }
     # Espace disque : widget natif yasb.disk.DiskWidget abandonné (lecture synchrone sur le
     # fil de la barre : un partage réseau injoignable la gèlerait) ; on retire l'ancien bloc.
-    $t = [regex]::Replace($t, '(?ms)^  # Espace disque \(perso[^\r\n]*\r?\n  disk:\r?\n.*?\r?\n\r?\n', '')
+    $t = [regex]::Replace($t, '(?ms)^  # Espace disque \(perso[^\r\n]*\r?\n  disk:\r?\n.*?(?=^  \S)', '')
     $t = $t.Replace('"memory", "disk"', '"memory"')
     # Disques : script en arrière-plan (CustomWidget) ; barre = disques locaux en %,
     # bulle = détail de tous les disques (réseau compris), clic droit/milieu = disques réseau.

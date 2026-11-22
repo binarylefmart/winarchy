@@ -232,26 +232,26 @@ widgets:
         on_left: "toggle_menu"
         on_right: "toggle_label"
 
-  # Espace disque (perso, setup-winarchy.ps1) : clic = C: et D:, milieu = Go, droit = Explorateur.
-  disk:
-    type: "yasb.disk.DiskWidget"
+  # Disques (perso, setup-winarchy.ps1) : barre = locaux en %, survol = détail (réseau compris),
+  # clic = Ce PC, droit/milieu = disques réseau. {data[...]} hors <span> (sinon pas substitué).
+  disques:
+    type: "yasb.custom.CustomWidget"
     options:
-      label: "<span>󰋊</span> {space[used][percent]}"
-      label_alt: "<span>󰋊</span> {space[free][gb]} libres"
-      volume_label: "C"
-      decimal_display: 0
-      update_interval: 60
-      group_label:
-        volume_labels: ["C", "D"]
-        show_label_name: true
-        blur: true
-        round_corners: true
-        alignment: "right"
-        direction: "down"
+      class_name: "disques-widget"
+      label: "{data[local]}"
+      label_alt: "{data[reseau]}"
+      tooltip: true
+      tooltip_label: "{data[detail]}"
+      exec_options:
+        run_cmd: 'powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%USERPROFILE%\.winarchy-perso\disques.ps1"'
+        run_interval: 60000
+        return_format: "json"
+        use_shell: true
+        encoding: "utf-8"
       callbacks:
-        on_left: "toggle_group"
+        on_left: "exec explorer.exe shell:MyComputerFolder"
         on_middle: "toggle_label"
-        on_right: "open_explorer"
+        on_right: "toggle_label"
   memory:
     type: "yasb.memory.MemoryWidget"
     options:
@@ -467,7 +467,7 @@ widgets:
     type: "yasb.grouper.GrouperWidget"
     options:
       class_name: "system-grouper"
-      widgets: ["gpu", "cpu", "memory", "disk"]
+      widgets: ["gpu", "cpu", "memory", "disques"]
       hide_empty: false
       collapse_options:
         enabled: false

@@ -26,6 +26,9 @@
         Fenêtre seule en pleine largeur par défaut (Super+F la centre)
         Barre YASB : groupes toujours dépliés, sans compteur Codex
         Barre YASB : icônes de la zone de notification renvoyées à chaque redémarrage de YASB
+        komorebi : tout est tilé (ShareX, Gestionnaire des tâches, Panneau de configuration, applis
+          ignorées ou flottantes de la liste communautaire ASC, lanceurs de jeux) ; 4 écrans décrits
+          (portable + 3 externes), 10 bureaux chacun ; relancé par sa tâche planifiée, en administrateur
 
   Raccourcis (ils passent devant ceux de Winarchy) :
         Super+Backspace            Claude Code (Foxis)
@@ -76,6 +79,8 @@ $Perso    = Join-Path $env:USERPROFILE '.winarchy-perso'
 $AhkDebut = '; >>> raccourcis-perso (setup-winarchy.ps1) >>>'
 $AhkFin   = '; <<< raccourcis-perso <<<'
 # Modèles suivis par git que ce script patche (et que Sync-Upstream.ps1 sait reprendre).
+# Posé quand des règles komorebi changent : relance en fin de script (Set-KomorebiAdmin).
+$script:RedemarrerKomorebi = $false
 $ModelesPatches = @('templates\komorebi.json.tpl', 'templates\yasb-config.yaml.tpl', 'templates\yasb-styles.css.tpl', 'games.toml', 'vendor\asc\applications.json', 'module\Winarchy\Private\Util.ps1')
 
 # Corps de ~\.winarchy-perso\devant.ahk (voir Write-DevantScript).
@@ -548,18 +553,23 @@ function Set-KomorebiAdmin([bool]$admin) {
         } finally { Remove-Item $tmp -Force -ErrorAction SilentlyContinue }
     }
     if ($admin) { Ok 'komorebi lancé en administrateur : fenêtres admin tilées' } else { Ok 'komorebi remis en droits limités' }
-    # komorebi en cours lancé avec d'autres droits : on le relance par la tâche.
+    # komorebi lancé avec d'autres droits, ou règles modifiées : relance par la tâche.
     $k = Get-Process komorebi -ErrorAction SilentlyContinue | Select-Object -First 1
-    if (-not $k) { return }
+    if (-not $k) {
+        if ($admin) { & schtasks.exe /Run /TN $tache *> $null; Ok 'komorebi lancé par sa tâche planifiée' }
+        return
+    }
     # Sans droits admin, le handle d'un processus élevé est refusé (null ou exception).
     $h = try { $k.Handle } catch { $null }
     $eleve = $null -eq $h
-    if ($eleve -ne $admin) {
+    # komorebi garde les anciennes règles jusqu'au redémarrage (reload ne retire rien).
+    if ($eleve -ne $admin -or $script:RedemarrerKomorebi) {
         $komorebic = Join-Path $env:ProgramFiles 'komorebi\bin\komorebic.exe'
         & $komorebic stop *> $null
         Start-Sleep -Seconds 2
         & schtasks.exe /Run /TN $tache *> $null
-        Ok 'komorebi relancé par sa tâche planifiée'
+        $script:RedemarrerKomorebi = $false
+        Ok 'komorebi relancé par sa tâche planifiée (règles à jour)'
     }
 }
 
@@ -1496,6 +1506,7 @@ function Set-ReglagesWinarchy([string]$Root) {
             [IO.File]::WriteAllText($p, $apres, (New-Object Text.UTF8Encoding $false))
             Ok "$rel patché"
             $change = $true
+            if ($rel -notmatch 'yasb|Util\.ps1') { $script:RedemarrerKomorebi = $true }
         } else { Info "$rel déjà à jour" }
     }
     # Règles komorebi par appli (rules.toml).
@@ -1513,7 +1524,8 @@ function Set-ReglagesWinarchy([string]$Root) {
     if ($actuel -match $mauvaise) {
         $actuel = [regex]::Replace($actuel, $mauvaise, '')
         [IO.File]::WriteAllText($rules, $actuel, (New-Object Text.UTF8Encoding $false))
-        Warn 'Règle komorebi « manage <exe> » retirée : redémarre komorebi pour l''oublier (reload ne retire pas les règles)'
+        Info 'Règle komorebi « manage <exe> » retirée'
+        $script:RedemarrerKomorebi = $true
     }
     $voulues = @(
         @('manage', 'title', 'Claude'),
@@ -1529,7 +1541,7 @@ function Set-ReglagesWinarchy([string]$Root) {
         $cat, $cle, $val, $strategie = $r
         if ($actuel -match "(?m)^\[\[$cat\]\]\s*\r?\n\s*$cle\s*=\s*`"$([regex]::Escape($val))`"") { continue }
         $argsCli = @('rules', 'add', $cat, $cle, $val) + @($strategie | Where-Object { $_ })
-        if (Invoke-WinarchyCli $Root $argsCli) { Ok "Règle komorebi : $cat $cle $val" }
+        if (Invoke-WinarchyCli $Root $argsCli) { Ok "Règle komorebi : $cat $cle $val"; $script:RedemarrerKomorebi = $true }
         else { Warn "Règle komorebi $cat $cle $val non ajoutée" }
     }
     if ($change) { Update-ThemeActif $Root }

@@ -240,9 +240,8 @@ widgets:
       label_alt: "<span>󰋊</span> {space[free][gb]} libres"
       volume_label: "C"
       decimal_display: 0
-      update_interval: 60000
+      update_interval: 60
       group_label:
-        enabled: true
         volume_labels: ["C", "D"]
         show_label_name: true
         blur: true

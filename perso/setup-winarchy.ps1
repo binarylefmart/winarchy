@@ -915,6 +915,8 @@ function Edit-ModeleYasb([string]$t) {
         $t = [regex]::Replace($t, '(?m)^(?=  tool_region:)', $bloc.Replace('$', '$$'), 1)
     }
     # Espace disque (widget natif YASB), après la mémoire : C: dans la barre, C: + D: au clic.
+    # (YASB : update_interval en secondes, pas de group_label.enabled ; corrige un ancien patch.)
+    $t = [regex]::Replace($t, '(?m)^(      update_interval: )60000(\r?\n      group_label:\r?\n)        enabled: true\r?\n', '${1}60${2}')
     if ($t -notmatch '(?m)^  disk:') {
         if ($t -notmatch '"cpu", "memory"' -or $t -notmatch '(?m)^  memory:') { throw 'ancre disk absente' }
         $t = $t.Replace('"cpu", "memory"', '"cpu", "memory", "disk"')
@@ -927,9 +929,8 @@ function Edit-ModeleYasb([string]$t) {
       label_alt: "<span>ICONE</span> {space[free][gb]} libres"
       volume_label: "C"
       decimal_display: 0
-      update_interval: 60000
+      update_interval: 60
       group_label:
-        enabled: true
         volume_labels: ["C", "D"]
         show_label_name: true
         blur: true

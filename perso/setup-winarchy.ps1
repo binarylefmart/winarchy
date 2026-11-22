@@ -72,7 +72,7 @@ $Perso    = Join-Path $env:USERPROFILE '.winarchy-perso'
 $AhkDebut = '; >>> raccourcis-perso (setup-winarchy.ps1) >>>'
 $AhkFin   = '; <<< raccourcis-perso <<<'
 # Modèles suivis par git que ce script patche (et que Sync-Upstream.ps1 sait reprendre).
-$ModelesPatches = @('templates\komorebi.json.tpl', 'templates\yasb-config.yaml.tpl', 'templates\yasb-styles.css.tpl')
+$ModelesPatches = @('templates\komorebi.json.tpl', 'templates\yasb-config.yaml.tpl', 'templates\yasb-styles.css.tpl', 'games.toml')
 
 function Ok([string]$m)   { Write-Host "  OK  $m" -ForegroundColor Green }
 function Info([string]$m) { Write-Host "  --  $m" -ForegroundColor DarkGray }
@@ -1128,10 +1128,20 @@ function Edit-ModeleYasbStyles([string]$t) {
 '@ + "`n") -replace '\r?\n', $nl
 }
 
+# Lanceurs de jeux (Steam, Epic, GOG…) : Winarchy les met dans games.toml, donc komorebi
+# les ignore ET les raccourcis Super sont suspendus quand ils ont le focus. On veut les
+# tiler comme n'importe quelle appli : on retire leurs entrées [[launchers]]. RustDesk
+# reste (session distante : les touches Super doivent passer à la machine distante).
+# Les règles ASC restent actives (ex. Steam : seule la fenêtre « Steam » est tuilée,
+# pas les popups amis / notifications de steamwebhelper).
+function Edit-JeuxLanceurs([string]$t) {
+    [regex]::Replace($t, '(?m)^\[\[launchers\]\]\s*\r?\nexe\s*=\s*"(?!rustdesk)[^"]+"[^\r\n]*(\r?\n)+', '')
+}
+
 function Set-ReglagesWinarchy([string]$Root) {
     Write-Host '==> Réglages perso dans les modèles de Winarchy'
     $change = $false
-    $patchs = @{ 'templates\komorebi.json.tpl' = ${function:Edit-ModeleKomorebi}; 'templates\yasb-config.yaml.tpl' = ${function:Edit-ModeleYasb}; 'templates\yasb-styles.css.tpl' = ${function:Edit-ModeleYasbStyles} }
+    $patchs = @{ 'templates\komorebi.json.tpl' = ${function:Edit-ModeleKomorebi}; 'templates\yasb-config.yaml.tpl' = ${function:Edit-ModeleYasb}; 'templates\yasb-styles.css.tpl' = ${function:Edit-ModeleYasbStyles}; 'games.toml' = ${function:Edit-JeuxLanceurs} }
     foreach ($rel in $ModelesPatches) {
         $p = Join-Path $Root $rel
         if (-not (Test-Path $p)) { Warn "$rel introuvable : réglage ignoré"; continue }

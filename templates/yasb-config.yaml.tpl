@@ -232,6 +232,27 @@ widgets:
         on_left: "toggle_menu"
         on_right: "toggle_label"
 
+  # Espace disque (perso, setup-winarchy.ps1) : clic = C: et D:, milieu = Go, droit = Explorateur.
+  disk:
+    type: "yasb.disk.DiskWidget"
+    options:
+      label: "<span>󰋊</span> {space[used][percent]}"
+      label_alt: "<span>󰋊</span> {space[free][gb]} libres"
+      volume_label: "C"
+      decimal_display: 0
+      update_interval: 60000
+      group_label:
+        enabled: true
+        volume_labels: ["C", "D"]
+        show_label_name: true
+        blur: true
+        round_corners: true
+        alignment: "right"
+        direction: "down"
+      callbacks:
+        on_left: "toggle_group"
+        on_middle: "toggle_label"
+        on_right: "open_explorer"
   memory:
     type: "yasb.memory.MemoryWidget"
     options:
@@ -447,7 +468,7 @@ widgets:
     type: "yasb.grouper.GrouperWidget"
     options:
       class_name: "system-grouper"
-      widgets: ["gpu", "cpu", "memory"]
+      widgets: ["gpu", "cpu", "memory", "disk"]
       hide_empty: false
       collapse_options:
         enabled: false

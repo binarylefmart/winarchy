@@ -914,6 +914,36 @@ function Edit-ModeleYasb([string]$t) {
 '@).Replace('VIDE', [string][char]0xF014).Replace('PLEINE', [string][char]0xF1F8) -replace '\r?\n', $(if ($t -match "`r`n") { "`r`n" } else { "`n" })
         $t = [regex]::Replace($t, '(?m)^(?=  tool_region:)', $bloc.Replace('$', '$$'), 1)
     }
+    # Espace disque (widget natif YASB), après la mémoire : C: dans la barre, C: + D: au clic.
+    if ($t -notmatch '(?m)^  disk:') {
+        if ($t -notmatch '"cpu", "memory"' -or $t -notmatch '(?m)^  memory:') { throw 'ancre disk absente' }
+        $t = $t.Replace('"cpu", "memory"', '"cpu", "memory", "disk"')
+        $bloc = (@'
+  # Espace disque (perso, setup-winarchy.ps1) : clic = C: et D:, milieu = Go, droit = Explorateur.
+  disk:
+    type: "yasb.disk.DiskWidget"
+    options:
+      label: "<span>ICONE</span> {space[used][percent]}"
+      label_alt: "<span>ICONE</span> {space[free][gb]} libres"
+      volume_label: "C"
+      decimal_display: 0
+      update_interval: 60000
+      group_label:
+        enabled: true
+        volume_labels: ["C", "D"]
+        show_label_name: true
+        blur: true
+        round_corners: true
+        alignment: "right"
+        direction: "down"
+      callbacks:
+        on_left: "toggle_group"
+        on_middle: "toggle_label"
+        on_right: "open_explorer"
+
+'@).Replace('ICONE', [char]::ConvertFromUtf32(0xF02CA)) -replace '\r?\n', $(if ($t -match "`r`n") { "`r`n" } else { "`n" })
+        $t = [regex]::Replace($t, '(?m)^(?=  memory:)', $bloc.Replace('$', '$$'), 1)
+    }
     # Indicateur des fenêtres ouvertes (icônes cliquables) après l'icône de layout.
     if ($t -notmatch 'yasb\.taskbar\.TaskbarWidget') {
         if ($t -notmatch '"komorebi_active_layout", ' -or $t -notmatch '(?m)^  komorebi_workspaces:') { throw 'ancre taskbar absente' }

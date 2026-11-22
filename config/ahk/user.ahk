@@ -503,15 +503,16 @@ PersoSurveilleSurvol() {
 ; (komorebi refuse de les tuiler) ; toutes restent déplaçables.
 SetTimer(PersoDialoguesDevant, 250)
 PersoDialoguesDevant() {
-    static vues := Map()
+    static vues := Map()                             ; hwnd -> 1 suivie (garder devant), 0 ignorée
     for hwnd in WinGetList('ahk_class #32770') {
         if vues.Has(hwnd)
             continue
-        vues[hwnd] := 1
+        vues[hwnd] := 0
         try {
             explorateur := (WinGetProcessName(hwnd) = 'explorer.exe')
             if (!explorateur && !DllCall('GetWindow', 'Ptr', hwnd, 'UInt', 4, 'Ptr'))   ; GW_OWNER : pas rattachée
                 continue
+            vues[hwnd] := 1
             titre := WinGetTitle(hwnd)
             if (explorateur && (InStr(titre, 'Propriétés') || InStr(titre, 'Properties')))
                 PersoCentre(hwnd)
@@ -519,15 +520,23 @@ PersoDialoguesDevant() {
             WinActivate(hwnd)
         }
     }
-    for hwnd in WinGetList('ahk_class OperationStatusWindow') {
-        if vues.Has(hwnd)
-            continue
-        vues[hwnd] := 1
-        try WinSetAlwaysOnTop(1, hwnd)
-    }
-    for hwnd in [vues*]                              ; oublie les fenêtres fermées
-        if !WinExist(hwnd)
+    for hwnd in WinGetList('ahk_class OperationStatusWindow')
+        if !vues.Has(hwnd)
+            vues[hwnd] := 1
+    ; À chaque passage : oublie les fenêtres fermées, et remet devant (sans focus) celles
+    ; qui ont perdu le « toujours au-dessus » (le premier réglage ne tient pas toujours).
+    for hwnd, suivie in vues.Clone() {
+        if !WinExist(hwnd) {
             vues.Delete(hwnd)
+            continue
+        }
+        if !suivie
+            continue
+        try {
+            if !(WinGetExStyle(hwnd) & 0x8)                  ; WS_EX_TOPMOST
+                WinSetAlwaysOnTop(1, hwnd)
+        }
+    }
 }
 PersoCentre(hwnd) {
     WinGetPos(&x, &y, &l, &h, hwnd)

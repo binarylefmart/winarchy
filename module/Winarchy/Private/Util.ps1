@@ -98,7 +98,9 @@ function Start-WinarchyKomorebi {
     if (Test-WinarchyProcess 'komorebi') { return }
     $exe = Get-WinarchyKomorebiExe
     if (-not $exe) { Write-WinarchyWarn 'komorebi.exe not found; tiling not started.'; return }
-    Start-Process $exe -WindowStyle Hidden
+    # perso : via la tâche planifiée (komorebi en administrateur : fenêtres admin tilées)
+    & schtasks.exe /Run /TN '\Winarchy\komorebi' *> $null
+    if ($LASTEXITCODE -ne 0) { Start-Process $exe -WindowStyle Hidden }
 }
 
 function Write-WinarchyInfo { param([string]$Message) Write-Host "  $Message" }

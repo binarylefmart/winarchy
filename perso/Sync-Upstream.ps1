@@ -1,4 +1,4 @@
-﻿# Sync-Upstream.ps1 — récupère les mises à jour du projet d'origine (remote `upstream`)
+# Sync-Upstream.ps1 — récupère les mises à jour du projet d'origine (remote `upstream`)
 # en gardant les réglages et fix perso, puis pousse le tout sur ton fork (`origin`).
 # Lancé par setup-winarchy.ps1 ; utilisable seul.
 #
@@ -26,7 +26,7 @@ if (-not $env:GH_CONFIG_DIR) {
 # Modèles que setup-winarchy.ps1 repatche à chaque lancement : en cas de conflit avec le
 # projet d'origine, on prend sa version et le script réapplique les réglages par-dessus.
 $repatches = 'templates/komorebi.json.tpl', 'templates/yasb-config.yaml.tpl', 'templates/yasb-styles.css.tpl', 'games.toml',
-             'vendor/asc/applications.json'
+             'vendor/asc/applications.json', 'module/Winarchy/Private/Util.ps1'
 
 # Remotes attendus : origin = ton fork, upstream = projet d'origine.
 if (-not (& git -C $root remote | Where-Object { $_ -eq 'upstream' })) {

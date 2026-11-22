@@ -43,7 +43,9 @@
         Super (seul)               Lanceur d'applis Winarchy (à la place du menu Démarrer)
         Super+Espace               Menu Démarrer de Windows
         Super+Q                    Menu Winarchy (reste aussi sur Super+Alt+Espace)
-        Super+Ctrl+Alt+flèches     Fenêtre -> écran voisin
+        Super+Ctrl+Alt+flèches     Fenêtre -> écran voisin (position réelle des écrans)
+        Super+Alt+1..4             Aller sur l'écran N (numérotés de gauche à droite)
+        Super+Alt+Shift+1..4       Envoyer la fenêtre sur l'écran N
         Super+F                    Plein : fenêtre seule = pleine largeur (défaut) <-> centrée ;
                                    plusieurs fenêtres = monocle (l'active remplit le bureau)
         Super+Shift+T              Tout retiler : flottantes remises en tuiles, monocle quitté,
@@ -57,6 +59,8 @@
         Super+Shift+S              Ramener toutes les fenêtres réduites par Super+S
         Super+P                    Projeter, le menu de Windows (Winarchy y mettait la pause du tiling)
   Et le focus suit la souris (survol = fenêtre active, comme sous Omarchy).
+  komorebi tourne en administrateur pour tiler aussi les fenêtres admin (une fenêtre UAC
+  au premier lancement ; -Desinstaller le remet en droits limités).
 #>
 param(
     [switch]$Desinstaller,
@@ -72,7 +76,7 @@ $Perso    = Join-Path $env:USERPROFILE '.winarchy-perso'
 $AhkDebut = '; >>> raccourcis-perso (setup-winarchy.ps1) >>>'
 $AhkFin   = '; <<< raccourcis-perso <<<'
 # Modèles suivis par git que ce script patche (et que Sync-Upstream.ps1 sait reprendre).
-$ModelesPatches = @('templates\komorebi.json.tpl', 'templates\yasb-config.yaml.tpl', 'templates\yasb-styles.css.tpl', 'games.toml', 'vendor\asc\applications.json')
+$ModelesPatches = @('templates\komorebi.json.tpl', 'templates\yasb-config.yaml.tpl', 'templates\yasb-styles.css.tpl', 'games.toml', 'vendor\asc\applications.json', 'module\Winarchy\Private\Util.ps1')
 
 # Corps de ~\.winarchy-perso\devant.ahk (voir Write-DevantScript).
 $script:CorpsDevant = @'
@@ -515,6 +519,50 @@ function Restart-WinarchyAhk([string]$mainAhk, [string]$ahkExe) {
     if ($ok) { Ok 'winarchy.ahk relancé avec tes raccourcis' } else { Err 'winarchy.ahk ne tourne pas : lance « winarchy reload ».' }
 }
 
+# Fenêtres admin tilées par défaut : komorebi sans droits admin ne peut pas déplacer une
+# fenêtre lancée en administrateur (Gestionnaire des tâches, installeurs…). La tâche
+# \Winarchy\komorebi passe en « privilèges les plus élevés » (une fenêtre UAC, une seule
+# fois). Winarchy la réenregistre sans droits admin à chaque mise à jour : ça échoue et
+# l'ancienne tâche reste (Autostart.ps1). -Desinstaller la remet en droits limités.
+function Set-KomorebiAdmin([bool]$admin) {
+    $tache = '\Winarchy\komorebi'
+    $voulu = if ($admin) { 'HighestAvailable' } else { 'LeastPrivilege' }
+    $xml = (& schtasks.exe /Query /TN $tache /XML 2>$null) -join "`r`n"
+    if ($LASTEXITCODE -ne 0) { Warn "Tâche $tache introuvable : komorebi admin non réglé"; return }
+    # RunLevel est absent de l'export quand il vaut LeastPrivilege (défaut).
+    $actuel = if ($xml -match '<RunLevel>([^<]+)</RunLevel>') { $Matches[1] } else { 'LeastPrivilege' }
+    if ($actuel -ne $voulu) {
+        $neuf = $xml -replace '\s*<RunLevel>[^<]*</RunLevel>', ''
+        if ($admin) { $neuf = $neuf -replace '(<LogonType>InteractiveToken</LogonType>)', "`$1`r`n      <RunLevel>HighestAvailable</RunLevel>" }
+        $tmp = Join-Path $env:TEMP 'winarchy-komorebi-tache.xml'
+        Set-Content -Path $tmp -Value $neuf -Encoding Unicode
+        $cmd = "& schtasks.exe /Create /TN '$tache' /XML '$tmp' /F | Out-Null; exit `$LASTEXITCODE"
+        $enc = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($cmd))
+        Info 'Fenêtre UAC : accepte-la pour régler komorebi (fenêtres admin tilées)'
+        try {
+            $p = Start-Process powershell.exe -Verb RunAs -Wait -PassThru -WindowStyle Hidden -ArgumentList '-NoProfile', '-EncodedCommand', $enc
+            if ($p.ExitCode -ne 0) { throw "schtasks a renvoyé $($p.ExitCode)" }
+        } catch {
+            Warn "komorebi pas réglé ($($_.Exception.Message)) : les fenêtres admin ne seront pas tilées"
+            return
+        } finally { Remove-Item $tmp -Force -ErrorAction SilentlyContinue }
+    }
+    if ($admin) { Ok 'komorebi lancé en administrateur : fenêtres admin tilées' } else { Ok 'komorebi remis en droits limités' }
+    # komorebi en cours lancé avec d'autres droits : on le relance par la tâche.
+    $k = Get-Process komorebi -ErrorAction SilentlyContinue | Select-Object -First 1
+    if (-not $k) { return }
+    # Sans droits admin, le handle d'un processus élevé est refusé (null ou exception).
+    $h = try { $k.Handle } catch { $null }
+    $eleve = $null -eq $h
+    if ($eleve -ne $admin) {
+        $komorebic = Join-Path $env:ProgramFiles 'komorebi\bin\komorebic.exe'
+        & $komorebic stop *> $null
+        Start-Sleep -Seconds 2
+        & schtasks.exe /Run /TN $tache *> $null
+        Ok 'komorebi relancé par sa tâche planifiée'
+    }
+}
+
 function Install-Raccourcis([string]$Root) {
     $MainAhk = Join-Path $Root 'config\ahk\winarchy.ahk'
     $UserAhk = Join-Path $Root 'config\ahk\user.ahk'
@@ -557,6 +605,7 @@ function Install-Raccourcis([string]$Root) {
         Restart-WinarchyAhk $MainAhk $ahkExe
         Set-Survol $false
         Set-ToucheOffice $false
+        Set-KomorebiAdmin $false
         if (Test-Path $Perso) { Remove-Item $Perso -Recurse -Force; Ok "Supprimé : $Perso" }
         return
     }
@@ -1147,6 +1196,7 @@ PersoLanceDevant() {
     Restart-WinarchyAhk $MainAhk $ahkExe
     Set-Survol $true
     Set-ToucheOffice $true
+    Set-KomorebiAdmin $true
 }
 
 # --- Réglages perso dans les modèles de Winarchy ---------------------------------
@@ -1209,6 +1259,21 @@ function Edit-ModeleKomorebi([string]$t) {
         $t = [regex]::Replace($t, "(,\s*)?\{\s*`"kind`":\s*`"\w+`",\s*`"id`":\s*`"$id`",\s*`"matching_strategy`":\s*`"Equals`"\s*\}(?(1)|,?)", '')
     }
     $t
+}
+
+# Winarchy relance komorebi en direct (Start-Process, donc sans droits admin) quand il ne
+# tourne pas au moment d'un reload / theme set. On passe par la tâche planifiée, qui le
+# lance en administrateur (voir Set-KomorebiAdmin) ; repli sur l'ancien lancement.
+function Edit-UtilKomorebi([string]$t) {
+    if ($t.Contains('perso : via la tâche planifiée')) { return $t }
+    $m = [regex]::Match($t, '(?s)(function Start-WinarchyKomorebi \{.*?)(\r?\n)    Start-Process \$exe -WindowStyle Hidden(\r?\n)\}')
+    if (-not $m.Success) { throw 'Start-WinarchyKomorebi introuvable' }
+    $nl = $m.Groups[2].Value
+    $neuf = $m.Groups[1].Value + $nl +
+        "    # perso : via la tâche planifiée (komorebi en administrateur : fenêtres admin tilées)$nl" +
+        "    & schtasks.exe /Run /TN '\Winarchy\komorebi' *> `$null$nl" +
+        "    if (`$LASTEXITCODE -ne 0) { Start-Process `$exe -WindowStyle Hidden }$nl}"
+    $t.Remove($m.Index, $m.Length).Insert($m.Index, $neuf)
 }
 
 # Règles de la communauté (ASC) : l'utilisateur veut tout tiler. On retire les « ignore »
@@ -1420,7 +1485,7 @@ function Edit-JeuxLanceurs([string]$t) {
 function Set-ReglagesWinarchy([string]$Root) {
     Write-Host '==> Réglages perso dans les modèles de Winarchy'
     $change = $false
-    $patchs = @{ 'templates\komorebi.json.tpl' = ${function:Edit-ModeleKomorebi}; 'templates\yasb-config.yaml.tpl' = ${function:Edit-ModeleYasb}; 'templates\yasb-styles.css.tpl' = ${function:Edit-ModeleYasbStyles}; 'games.toml' = ${function:Edit-JeuxLanceurs}; 'vendor\asc\applications.json' = ${function:Edit-AscPerso} }
+    $patchs = @{ 'templates\komorebi.json.tpl' = ${function:Edit-ModeleKomorebi}; 'templates\yasb-config.yaml.tpl' = ${function:Edit-ModeleYasb}; 'templates\yasb-styles.css.tpl' = ${function:Edit-ModeleYasbStyles}; 'games.toml' = ${function:Edit-JeuxLanceurs}; 'vendor\asc\applications.json' = ${function:Edit-AscPerso}; 'module\Winarchy\Private\Util.ps1' = ${function:Edit-UtilKomorebi} }
     foreach ($rel in $ModelesPatches) {
         $p = Join-Path $Root $rel
         if (-not (Test-Path $p)) { Warn "$rel introuvable : réglage ignoré"; continue }

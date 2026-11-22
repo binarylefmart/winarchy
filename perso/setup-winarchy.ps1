@@ -605,10 +605,18 @@ InstallMouseHook()
 ~LWin::PersoSuper(true)
 LWin up::PersoSuper(false)
 ; --- Perso : fenêtres ---------------------------------------------------------
-#^!Left::PersoKomorebic('cycle-move-to-monitor previous')   ; Fenêtre vers l'écran voisin
-#^!Up::PersoKomorebic('cycle-move-to-monitor previous')
-#^!Right::PersoKomorebic('cycle-move-to-monitor next')
-#^!Down::PersoKomorebic('cycle-move-to-monitor next')
+#^!Left::PersoVersEcran('left')                   ; Fenêtre vers l'écran voisin (position réelle)
+#^!Up::PersoVersEcran('up')
+#^!Right::PersoVersEcran('right')
+#^!Down::PersoVersEcran('down')
+#!1::PersoEcran(1, 'focus')                       ; Aller sur l'écran N (numérotés de gauche à droite)
+#!2::PersoEcran(2, 'focus')
+#!3::PersoEcran(3, 'focus')
+#!4::PersoEcran(4, 'focus')
+#!+1::PersoEcran(1, 'move')                       ; Envoyer la fenêtre sur l'écran N (et la suivre)
+#!+2::PersoEcran(2, 'move')
+#!+3::PersoEcran(3, 'move')
+#!+4::PersoEcran(4, 'move')
 #f::PersoPlein()                                  ; Plein : seule = centrée <-> pleine largeur ; sinon monocle
 #+f::return                                       ; Supprimé (agrandissement Windows de Winarchy)
 #+t::PersoToutTiler()                             ; Tout le bureau en tiling, tuiles à parts égales (remplace « thème suivant »)
@@ -676,6 +684,63 @@ PersoEtat() {
     tmp := A_Temp '\winarchy-perso-state.json'
     RunWait(A_ComSpec ' /c ""' KomorebicExe '" state > "' tmp '""', , 'Hide')
     return doc.parentWindow.JSON.parse(FileRead(tmp))
+}
+
+; Écrans de komorebi rangés de gauche à droite (puis de haut en bas) : la numérotation de
+; Windows / komorebi ne suit pas la position physique. Renvoie [indices komorebi, état].
+PersoEcransTries() {
+    state := PersoEtat()
+    els := state.monitors.elements
+    ecrans := []
+    Loop els.length {
+        i := A_Index - 1
+        s := els.%i%.size
+        ecrans.Push({idx: i, x: s.left + s.right / 2, y: s.top + s.bottom / 2, l: s.left, t: s.top})
+    }
+    ; tri par insertion (4 écrans au plus)
+    Loop ecrans.Length - 1 {
+        j := A_Index + 1
+        e := ecrans[j], k := j - 1
+        while k >= 1 && (ecrans[k].l > e.l || (ecrans[k].l = e.l && ecrans[k].t > e.t)) {
+            ecrans[k + 1] := ecrans[k], k--
+        }
+        ecrans[k + 1] := e
+    }
+    return [ecrans, state]
+}
+
+; Super+Alt+N : aller sur l'écran N ; Super+Alt+Maj+N : y envoyer la fenêtre active.
+PersoEcran(n, action) {
+    try {
+        r := PersoEcransTries(), ecrans := r[1]
+        if n > ecrans.Length
+            return
+        PersoKomorebic((action = 'move' ? 'move-to-monitor ' : 'focus-monitor ') ecrans[n].idx)
+    }
+}
+
+; Super+Ctrl+Alt+flèche : fenêtre vers l'écran le plus proche dans cette direction.
+PersoVersEcran(dir) {
+    try {
+        r := PersoEcransTries(), ecrans := r[1], state := r[2]
+        cur := 0
+        for e in ecrans
+            if e.idx = state.monitors.focused
+                cur := e
+        if !cur
+            return
+        best := 0, bestD := 0
+        for e in ecrans {
+            dx := e.x - cur.x, dy := e.y - cur.y
+            ok := (dir = 'left' && dx < 0 && Abs(dx) >= Abs(dy)) || (dir = 'right' && dx > 0 && Abs(dx) >= Abs(dy))
+               || (dir = 'up' && dy < 0 && Abs(dy) > Abs(dx)) || (dir = 'down' && dy > 0 && Abs(dy) > Abs(dx))
+            d := dx * dx + dy * dy
+            if ok && (!best || d < bestD)
+                best := e, bestD := d
+        }
+        if best
+            PersoKomorebic('move-to-monitor ' best.idx)
+    }
 }
 
 ; Barres, bureau et YASB : jamais déplacés ni réduits.
@@ -1125,6 +1190,18 @@ function Edit-ModeleKomorebi([string]$t) {
         $ecran = [regex]::Replace($ecran, '\{(\s*)$', "{`$1$offset`$1`"window_based_work_area_offset_limit`": 1,`$1")
     }
     $t = $t.Substring(0, $i) + $ecran + $t.Substring($w)
+    # Portable + 3 écrans externes : le modèle ne décrit que 2 écrans, on complète jusqu'à 4
+    # (10 bureaux chacun, comme le 2e). Un écran absent ne gêne pas komorebi.
+    $i = $t.IndexOf('"monitors": [')
+    $fin = [regex]::Match($t.Substring($i), '\r?\n  \]')
+    if (-not $fin.Success) { throw 'fin de « monitors » introuvable' }
+    $n = ([regex]::Matches($t.Substring($i, $fin.Index), '"workspaces": \[')).Count
+    if ($n -lt 4) {
+        $nl = if ($t.Contains("`r`n")) { "`r`n" } else { "`n" }
+        $ws = (1..10 | ForEach-Object { "        { `"name`": `"$_`", `"layout`": `"BSP`" }" }) -join ",$nl"
+        $bloc = ",$nl    {$nl      `"workspaces`": [$nl$ws$nl      ]$nl    }"
+        $t = $t.Insert($i + $fin.Index, $bloc * (4 - $n))
+    }
     # Tilés comme le reste alors que Winarchy les ignore d'office (ignore_rules) : ShareX
     # (ses surcouches de capture sont sans barre de titre, komorebi ne les gère pas de toute
     # façon), le Gestionnaire des tâches et le Panneau de configuration.
@@ -1185,6 +1262,10 @@ function Edit-ModeleYasb([string]$t) {
 '@).Replace('ICONE', [string][char]0xF0EA) -replace '\r?\n', $(if ($t -match "`r`n") { "`r`n" } else { "`n" })
         $t = [regex]::Replace($t, '(?m)^(?=  tool_region:)', $bloc.Replace('$', '$$'), 1)
     }
+    # Horloge : date + heure toujours visibles (en français) ; clic droit = secondes.
+    $t = [regex]::Replace($t, '(?m)^(  clock:\r?\n    type: "yasb\.clock\.ClockWidget"\r?\n    options:\r?\n)      label: "[^"\r\n]*"(\r?\n)      label_alt: "[^"\r\n]*"(\r?\n)(?:      locale: "[^"\r\n]*"\r?\n)?',
+        '${1}      label: "{%a %d %b · %H:%M}"${2}      label_alt: "{%A %d %B %Y · %H:%M:%S}"${3}      locale: "fr_FR"${3}')
+    if ($t -notmatch 'locale: "fr_FR"') { throw 'ancre horloge absente' }
     # Corbeille (widget natif YASB), juste après le bouton presse-papiers.
     if ($t -notmatch '(?m)^  recycle_bin:') {
         if ($t -notmatch '"tool_clipboard", ' -or $t -notmatch '(?m)^  tool_region:') { throw 'ancre recycle_bin absente' }

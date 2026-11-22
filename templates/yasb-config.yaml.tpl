@@ -187,8 +187,9 @@ widgets:
   clock:
     type: "yasb.clock.ClockWidget"
     options:
-      label: "{%H:%M}"
-      label_alt: "{%A %d %b %Y · %H:%M:%S}"
+      label: "{%a %d %b · %H:%M}"
+      label_alt: "{%A %d %B %Y · %H:%M:%S}"
+      locale: "fr_FR"
       timezones: []
       callbacks:
         on_left: "toggle_calendar"

@@ -1159,12 +1159,14 @@ function Set-ReglagesWinarchy([string]$Root) {
 function Update-ThemeActif([string]$Root) {
     $theme = Get-ThemeActif $Root
     if (-not $theme) { Warn 'Thème actif introuvable : lance « winarchy theme set <thème> » pour appliquer.'; return }
-    # `theme set` remet le fond du thème : on garde celui choisi par l'utilisateur s'il
-    # n'est pas un fond Winarchy (themes\<thème>\backgrounds).
+    # `theme set` remet le fond du thème : on remet ensuite celui choisi par l'utilisateur,
+    # sauf s'il fait partie des fonds du thème ACTIF (themes\<actif>\backgrounds). Un fond
+    # rangé dans le dossier d'un autre thème (ex. tokyo-night) est un choix perso : on le garde.
     $fond = (Get-ItemProperty 'HKCU:\Control Panel\Desktop' -Name WallPaper -ErrorAction SilentlyContinue).WallPaper
+    $fondsTheme = Join-Path $Root "themes\$theme\backgrounds"
     if (Invoke-WinarchyCli $Root @('theme', 'set', $theme)) { Ok "Thème « $theme » réappliqué" }
     else { Warn "« winarchy theme set $theme » a échoué" }
-    if ($fond -and (Test-Path $fond) -and -not $fond.StartsWith((Join-Path $Root 'themes'), [StringComparison]::OrdinalIgnoreCase)) {
+    if ($fond -and (Test-Path $fond) -and -not $fond.StartsWith($fondsTheme, [StringComparison]::OrdinalIgnoreCase)) {
         if (-not ('PersoWinarchy.SpiFond' -as [type])) {
             Add-Type -Namespace PersoWinarchy -Name SpiFond -MemberDefinition '[DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern bool SystemParametersInfo(uint a, uint b, string v, uint c);'
         }

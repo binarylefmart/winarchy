@@ -1469,9 +1469,31 @@ function Edit-ModeleYasbStyles([string]$t) {
     # Popups Bluetooth et volume : transparents d'origine (illisibles) → même fond que wifi/home.
     $t = [regex]::Replace($t, '(?ms)\r?\n\r?\n/\* Popups opaques \(perso, setup-winarchy\.ps1\).*?(?=\r?\n\r?\n|\s*\z)', '')
     $t = ($t.TrimEnd() + "`n`n" + @'
-/* Popups opaques (perso, setup-winarchy.ps1) : Bluetooth, volume */
+/* Popups opaques (perso, setup-winarchy.ps1) : tous les popups YASB (noms tirés de library.zip) */
 .bluetooth-menu,
-.audio-menu {
+.audio-menu,
+.open-meteo-card,
+.weather-card,
+.clock-popup,
+.microphone-menu,
+.media-menu,
+.media-lite-menu,
+.brightness-menu,
+.language-menu,
+.power-plan-menu,
+.power-menu-popup,
+.komorebi-layout-menu,
+.komorebi-control-menu,
+.control-center-menu,
+.systray-popup,
+.notes-menu,
+.todo-menu,
+.github-menu,
+.libre-menu,
+.quick-launch-popup,
+.whkd-popup,
+.window-switcher-popup,
+.context-menu {
     background-color: {{colors.background}};
     border: 1px solid {{colors.color8}};
     color: {{colors.foreground}};

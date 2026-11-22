@@ -603,9 +603,31 @@
 .system-grouper .widget,
 .connections-grouper .widget { padding: 0 6px; }
 
-/* Popups opaques (perso, setup-winarchy.ps1) : Bluetooth, volume */
+/* Popups opaques (perso, setup-winarchy.ps1) : tous les popups YASB (noms tirés de library.zip) */
 .bluetooth-menu,
-.audio-menu {
+.audio-menu,
+.open-meteo-card,
+.weather-card,
+.clock-popup,
+.microphone-menu,
+.media-menu,
+.media-lite-menu,
+.brightness-menu,
+.language-menu,
+.power-plan-menu,
+.power-menu-popup,
+.komorebi-layout-menu,
+.komorebi-control-menu,
+.control-center-menu,
+.systray-popup,
+.notes-menu,
+.todo-menu,
+.github-menu,
+.libre-menu,
+.quick-launch-popup,
+.whkd-popup,
+.window-switcher-popup,
+.context-menu {
     background-color: {{colors.background}};
     border: 1px solid {{colors.color8}};
     color: {{colors.foreground}};

@@ -440,6 +440,81 @@ if (-not $disques) { $detail = @('Disques : lecture impossible (délai dépassé
     Ok "Script disques (barre YASB) : $ps1"
 }
 
+# Widgets perf (GPU / CPU / RAM) de la barre YASB : les natifs n'ont pas de bulle au survol.
+# Le widget CPU lance perf.ps1, qui écrit perf.json ; GPU et RAM ne font que relire ce fichier
+# (un seul PowerShell par relevé au lieu de trois).
+function Write-PerfScript {
+    $ps1 = Join-Path $Perso 'perf.ps1'
+    New-Item -ItemType Directory -Force $Perso | Out-Null
+    Write-Utf8Bom $ps1 @'
+# Lancé par le widget « cpu » de la barre YASB (setup-winarchy.ps1), en arrière-plan.
+# Sortie JSON (aussi écrite dans perf.json, relu par les widgets gpu et memory).
+[Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)
+$inv = [Globalization.CultureInfo]::InvariantCulture
+$dossier = Split-Path $MyInvocation.MyCommand.Path
+$icCpu = [char]::ConvertFromUtf32(0xF4BC); $icGpu = [char]::ConvertFromUtf32(0xF08AE); $icRam = [char]::ConvertFromUtf32(0xF035B)
+function Go([double]$o) { '{0:0.0} Go' -f ($o / 1GB) }
+# Infos fixes (Win32_Processor est lent : ~1 s) mises en cache une fois.
+$fixe = Join-Path $dossier 'perf-fixe.json'
+$f = $null
+try { $f = Get-Content $fixe -Raw -ErrorAction Stop | ConvertFrom-Json } catch {}
+if (-not $f) {
+    $c = Get-CimInstance Win32_Processor | Select-Object -First 1
+    $v = @(Get-CimInstance Win32_VideoController | Where-Object { $_.Name -notmatch 'Basic|Virtual|Parsec|Remote' } | ForEach-Object Name)
+    $f = [pscustomobject]@{ cpu = $c.Name.Trim(); mhz = [int]$c.MaxClockSpeed; coeurs = [int]$c.NumberOfCores; threads = [int]$c.NumberOfLogicalProcessors; gpus = $v }
+    $f | ConvertTo-Json -Compress | Set-Content $fixe -Encoding UTF8
+}
+# Processeur : même mesure que le Gestionnaire des tâches (Processor Utility).
+$p = Get-CimInstance Win32_PerfFormattedData_Counters_ProcessorInformation -Filter "Name='_Total'"
+$cpu = [math]::Min(100, [int]$p.PercentProcessorUtility)
+$ghz = $f.mhz * $p.PercentProcessorPerformance / 100000
+# Mémoire
+$o = Get-CimInstance Win32_OperatingSystem
+$tot = $o.TotalVisibleMemorySize * 1KB; $libre = $o.FreePhysicalMemory * 1KB; $util = $tot - $libre
+$ram = 100 * $util / $tot
+$swapTot = $o.SizeStoredInPagingFiles * 1KB; $swapUtil = $swapTot - $o.FreeSpaceInPagingFiles * 1KB
+# Carte graphique : nvidia-smi si présent, sinon compteurs Windows (moteur 3D, mémoire dédiée).
+$gpu = $null; $gpuDetail = @()
+$smi = Get-Command nvidia-smi -ErrorAction SilentlyContinue
+if ($smi) {
+    $l = & $smi.Source --query-gpu=name,utilization.gpu,memory.used,memory.total,temperature.gpu --format=csv,noheader,nounits 2>$null | Select-Object -First 1
+    if ($l) {
+        $x = $l -split ',\s*'
+        $gpu = [int]$x[1]; $vUtil = [double]$x[2] * 1MB; $vTot = [double]$x[3] * 1MB
+        $gpuDetail = @("Carte graphique : $($x[0])", "Charge : $gpu %", "Mémoire vidéo : $(Go $vUtil) / $(Go $vTot)", "Température : $([int][double]::Parse($x[4], $inv)) °C")
+        $gpuAlt = "$icGpu $(Go $vUtil) / $(Go $vTot)"
+    }
+}
+if ($null -eq $gpu) {
+    $e = @(Get-CimInstance Win32_PerfFormattedData_GPUPerformanceCounters_GPUEngine -ErrorAction SilentlyContinue | Where-Object Name -like '*engtype_3D')
+    $gpu = [math]::Min(100, [int](($e | Measure-Object UtilizationPercentage -Sum).Sum))
+    $m = @(Get-CimInstance Win32_PerfFormattedData_GPUPerformanceCounters_GPUAdapterMemory -ErrorAction SilentlyContinue)
+    $vUtil = ($m | Measure-Object DedicatedUsage -Sum).Sum
+    $gpuDetail = @("Carte graphique : $($f.gpus -join ', ')", "Charge (3D) : $gpu %", "Mémoire vidéo utilisée : $(Go $vUtil)")
+    $gpuAlt = "$icGpu $(Go $vUtil)"
+}
+$r = [ordered]@{
+    cpu = "$icCpu $cpu%"
+    cpu_alt = "$icCpu " + $ghz.ToString('0.00', $inv) + ' GHz'
+    cpu_detail = (@("Processeur : $($f.cpu)", "Charge : $cpu %", ('Fréquence : {0:0.00} GHz (max {1:0.00})' -f $ghz, ($f.mhz / 1000)), "Cœurs : $($f.coeurs) ($($f.threads) threads)", "Processus : $((Get-Process).Count)") -join "`n")
+    gpu = "$icGpu $gpu%"
+    gpu_alt = $gpuAlt
+    gpu_detail = $gpuDetail -join "`n"
+    ram = "$icRam " + $ram.ToString('0.0', $inv) + '%'
+    ram_alt = "$icRam $(Go $libre) libres"
+    ram_detail = (@(('Mémoire : {0:0.0} % utilisée' -f $ram), "Utilisée : $(Go $util) / $(Go $tot)", "Libre : $(Go $libre)", "Fichier d'échange : $(Go $swapUtil) / $(Go $swapTot)") -join "`n")
+}
+$json = $r | ConvertTo-Json -Compress
+# Écriture atomique (GPU/RAM lisent le fichier en parallèle).
+$tmp = Join-Path $dossier 'perf.json.tmp'
+[IO.File]::WriteAllText($tmp, $json, [Text.UTF8Encoding]::new($false))
+Move-Item $tmp (Join-Path $dossier 'perf.json') -Force
+$json
+'@
+    Remove-Item (Join-Path $Perso 'perf-fixe.json') -ErrorAction SilentlyContinue   # recalculé (ex. autre PC)
+    Ok "Script perf (barre YASB) : $ps1"
+}
+
 # Les raccourcis Claude Desktop ouvrent la version Store (AppID Claude_pzs8sxrjxfjjc).
 function Test-ClaudeDesktop {
     if (Get-StartApps -ErrorAction SilentlyContinue | Where-Object { $_.Name -eq 'Claude' }) { Ok 'Claude Desktop installé' }
@@ -626,6 +701,7 @@ function Install-Raccourcis([string]$Root) {
     Write-ScreenpressoLauncher
     Write-PressePapiersLauncher
     Write-DisquesScript
+    Write-PerfScript
     Write-DevantScript
     Test-ClaudeDesktop
     $shell = if (Get-Command pwsh -ErrorAction SilentlyContinue) { 'pwsh' } else { 'powershell' }
@@ -1406,6 +1482,41 @@ function Edit-ModeleYasb([string]$t) {
     $bloc = ($modele.Replace('LIBELLE', 'locaux').Replace('CLE', 'disques').Replace('CLASSE', 'disques-widget').Replace('DONNEE', 'local') + "`n" +
              $modele.Replace('LIBELLE', 'réseau').Replace('CLE', 'disques_reseau').Replace('CLASSE', 'disques-reseau-widget').Replace('DONNEE', 'reseau') + "`n") -replace '\r?\n', $(if ($t -match "`r`n") { "`r`n" } else { "`n" })
     $t = [regex]::Replace($t, '(?m)^(?=  memory:)', $bloc.Replace('$', '$$'), 1)
+    # Perf GPU / CPU / RAM : widgets natifs remplacés par des CustomWidget pour avoir une bulle
+    # au survol (les natifs n'en ont pas). cpu lance perf.ps1 (écrit perf.json), gpu/memory relisent
+    # perf.json. Clic = Gestionnaire des tâches, droit = libellé alternatif. Remplacés sur place.
+    $nlY = if ($t -match "`r`n") { "`r`n" } else { "`n" }
+    $modelePerf = @'
+  CLE:
+    # Perf (perso, setup-winarchy.ps1) : bulle = détail, clic = Gestionnaire des tâches.
+    type: "yasb.custom.CustomWidget"
+    options:
+      class_name: "CLASSE"
+      label: "{data[DONNEE]}"
+      label_alt: "{data[DONNEE_alt]}"
+      label_placeholder: "…"
+      tooltip: true
+      tooltip_label: "{data[DONNEE_detail]}"
+      exec_options:
+        run_cmd: 'COMMANDE'
+        run_interval: INTERVALLE
+        return_format: "json"
+        use_shell: true
+        encoding: "utf-8"
+      callbacks:
+        on_left: "exec taskmgr.exe"
+        on_middle: "toggle_label"
+        on_right: "toggle_label"
+
+'@
+    $lancePerf = 'powershell.exe -NoProfile -ExecutionPolicy Bypass -File %USERPROFILE%\.winarchy-perso\perf.ps1'
+    $litPerf = 'cmd.exe /c type %USERPROFILE%\.winarchy-perso\perf.json'
+    foreach ($w in @(@('gpu', 'gpu-widget', 'gpu', $litPerf, 4000), @('cpu', 'cpu-widget', 'cpu', $lancePerf, 4000), @('memory', 'memory-widget', 'ram', $litPerf, 4000))) {
+        $rx = "(?m)^  $($w[0]):\r?\n(?:(?:    [^\r\n]*)?\r?\n)*"
+        if ($t -notmatch $rx) { throw "ancre perf $($w[0]) absente" }
+        $b = ($modelePerf.Replace('CLE', $w[0]).Replace('CLASSE', $w[1]).Replace('DONNEE', $w[2]).Replace('COMMANDE', $w[3]).Replace('INTERVALLE', [string]$w[4])) -replace '\r?\n', $nlY
+        $t = [regex]::Replace($t, $rx, $b.Replace('$', '$$'), 1)
+    }
     # Indicateur des fenêtres ouvertes (icônes cliquables) après l'icône de layout.
     if ($t -notmatch 'yasb\.taskbar\.TaskbarWidget') {
         if ($t -notmatch '"komorebi_active_layout", ' -or $t -notmatch '(?m)^  komorebi_workspaces:') { throw 'ancre taskbar absente' }
@@ -1461,6 +1572,9 @@ function Edit-ModeleYasbStyles([string]$t) {
 .disques-widget .label.alt { color: {{colors.foreground}}; }
 .disques-reseau-widget .label,
 .disques-reseau-widget .label.alt { color: {{ui.net}}; }
+.gpu-widget .label.alt,
+.cpu-widget .label.alt,
+.memory-widget .label.alt { color: {{ui.system}}; }
 .extras-grouper .widget,
 .ai-grouper .widget,
 .system-grouper .widget,

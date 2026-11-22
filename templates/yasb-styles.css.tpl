@@ -598,6 +598,9 @@
 .disques-widget .label.alt { color: {{colors.foreground}}; }
 .disques-reseau-widget .label,
 .disques-reseau-widget .label.alt { color: {{ui.net}}; }
+.gpu-widget .label.alt,
+.cpu-widget .label.alt,
+.memory-widget .label.alt { color: {{ui.system}}; }
 .extras-grouper .widget,
 .ai-grouper .widget,
 .system-grouper .widget,

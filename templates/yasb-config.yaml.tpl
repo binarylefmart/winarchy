@@ -214,25 +214,45 @@ widgets:
         on_right: "toggle_label"
 
   gpu:
-    type: "yasb.gpu.GpuWidget"
+    # Perf (perso, setup-winarchy.ps1) : bulle = détail, clic = Gestionnaire des tâches.
+    type: "yasb.custom.CustomWidget"
     options:
-      label: "<span>󰢮</span> {info[utilization]}%"
-      label_alt: "<span>󰢮</span> {info[mem_used]}/{info[mem_total]}"
-      update_interval: 2000
+      class_name: "gpu-widget"
+      label: "{data[gpu]}"
+      label_alt: "{data[gpu_alt]}"
+      label_placeholder: "…"
+      tooltip: true
+      tooltip_label: "{data[gpu_detail]}"
+      exec_options:
+        run_cmd: 'cmd.exe /c type %USERPROFILE%\.winarchy-perso\perf.json'
+        run_interval: 4000
+        return_format: "json"
+        use_shell: true
+        encoding: "utf-8"
       callbacks:
-        on_left: "toggle_menu"
+        on_left: "exec taskmgr.exe"
+        on_middle: "toggle_label"
         on_right: "toggle_label"
-
   cpu:
-    type: "yasb.cpu.CpuWidget"
+    # Perf (perso, setup-winarchy.ps1) : bulle = détail, clic = Gestionnaire des tâches.
+    type: "yasb.custom.CustomWidget"
     options:
-      label: "<span></span> {info[percent][total]}%"
-      label_alt: "<span></span> {info[freq][current]} MHz"
-      update_interval: 2000
+      class_name: "cpu-widget"
+      label: "{data[cpu]}"
+      label_alt: "{data[cpu_alt]}"
+      label_placeholder: "…"
+      tooltip: true
+      tooltip_label: "{data[cpu_detail]}"
+      exec_options:
+        run_cmd: 'powershell.exe -NoProfile -ExecutionPolicy Bypass -File %USERPROFILE%\.winarchy-perso\perf.ps1'
+        run_interval: 4000
+        return_format: "json"
+        use_shell: true
+        encoding: "utf-8"
       callbacks:
-        on_left: "toggle_menu"
+        on_left: "exec taskmgr.exe"
+        on_middle: "toggle_label"
         on_right: "toggle_label"
-
   # Disques locaux (perso, setup-winarchy.ps1) : % utilisé, survol = détail de tous les disques,
   # clic = Ce PC, droit/milieu = espace libre. {data[...]} hors <span> (sinon pas substitué).
   disques:
@@ -276,15 +296,25 @@ widgets:
         on_middle: "toggle_label"
         on_right: "toggle_label"
   memory:
-    type: "yasb.memory.MemoryWidget"
+    # Perf (perso, setup-winarchy.ps1) : bulle = détail, clic = Gestionnaire des tâches.
+    type: "yasb.custom.CustomWidget"
     options:
-      label: "<span>󰍛</span> {virtual_mem_percent}%"
-      label_alt: "<span>󰍛</span> {virtual_mem_free}"
-      update_interval: 5000
+      class_name: "memory-widget"
+      label: "{data[ram]}"
+      label_alt: "{data[ram_alt]}"
+      label_placeholder: "…"
+      tooltip: true
+      tooltip_label: "{data[ram_detail]}"
+      exec_options:
+        run_cmd: 'cmd.exe /c type %USERPROFILE%\.winarchy-perso\perf.json'
+        run_interval: 4000
+        return_format: "json"
+        use_shell: true
+        encoding: "utf-8"
       callbacks:
-        on_left: "toggle_menu"
+        on_left: "exec taskmgr.exe"
+        on_middle: "toggle_label"
         on_right: "toggle_label"
-
   # Indicador de red propio (CustomWidget). El yasb.wifi.WifiWidget nativo deja
   # el placeholder {wifi_icon} literal mientras su WiFiWorker (winrt) no puede
   # leer el adaptador —red abajo en el arranque, o radio WiFi off— y no expone

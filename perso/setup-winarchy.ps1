@@ -1475,7 +1475,33 @@ function Edit-ModeleYasbStyles([string]$t) {
     background-color: {{colors.background}};
     border: 1px solid {{colors.color8}};
     color: {{colors.foreground}};
+    border-radius: 8px;
 }
+/* Bluetooth : marges + taille mini (d'origine collé aux bords et trop court) */
+.bluetooth-menu {
+    padding: 10px 12px;
+    min-width: 340px;
+    min-height: 380px;
+}
+.bluetooth-menu .section-title {
+    font-weight: 600;
+    padding: 8px 4px 6px 4px;
+}
+.bluetooth-menu .bluetooth-list {
+    background-color: transparent;
+    min-height: 260px;
+}
+.bluetooth-menu .bluetooth-item {
+    padding: 8px 10px;
+    margin: 2px 0;
+    border-radius: 6px;
+}
+.bluetooth-menu .bluetooth-item:hover { background-color: {{colors.color8}}; }
+.bluetooth-menu .settings-button {
+    padding: 8px 4px;
+    margin-top: 6px;
+}
+.audio-menu { padding: 10px 12px; }
 '@ + "`n") -replace '\r?\n', $nl
     if ($t -match '\.taskbar-widget') { return $t }
     ($t.TrimEnd() + "`n`n" + @'

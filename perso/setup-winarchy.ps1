@@ -854,18 +854,28 @@ PersoSurveilleSurvol() {
 ; autre (vraies boîtes de dialogue, pas les fenêtres principales de vieilles applis), et
 ; TOUTES celles de l'Explorateur (« Supprimer plusieurs éléments » n'est rattachée à
 ; rien). La progression de copie/suppression de l'Explorateur reste devant
-; sans voler le focus. Les « Propriétés » de l'Explorateur sont en plus centrées
+; sans voler le focus. Les installeurs aussi (voir PersoEstInstalleur). Les « Propriétés » de l'Explorateur sont en plus centrées
 ; (komorebi refuse de les tuiler) ; toutes restent déplaçables.
 SetTimer(PersoDialoguesDevant, 250)
 PersoDialoguesDevant() {
     static vues := Map()                             ; hwnd -> 1 suivie (garder devant), 0 ignorée
-    for hwnd in WinGetList('ahk_class #32770') {
+    for hwnd in WinGetList() {
         if vues.Has(hwnd)
             continue
         vues[hwnd] := 0
         try {
+            classe := WinGetClass(hwnd)
+            if (classe = 'OperationStatusWindow') {
+                vues[hwnd] := 1                          ; progression : devant, sans focus
+                continue
+            }
+            if (WinGetExStyle(hwnd) & 0x80)              ; WS_EX_TOOLWINDOW : pas une vraie fenêtre
+                continue
+            installeur := PersoEstInstalleur(hwnd, classe)
+            if (classe != '#32770' && !installeur)
+                continue
             explorateur := (WinGetProcessName(hwnd) = 'explorer.exe')
-            if (!explorateur && !DllCall('GetWindow', 'Ptr', hwnd, 'UInt', 4, 'Ptr'))   ; GW_OWNER : pas rattachée
+            if (!installeur && !explorateur && !DllCall('GetWindow', 'Ptr', hwnd, 'UInt', 4, 'Ptr'))   ; GW_OWNER : pas rattachée
                 continue
             vues[hwnd] := 1
             titre := WinGetTitle(hwnd)
@@ -875,9 +885,6 @@ PersoDialoguesDevant() {
             WinActivate(hwnd)
         }
     }
-    for hwnd in WinGetList('ahk_class OperationStatusWindow')
-        if !vues.Has(hwnd)
-            vues[hwnd] := 1
     ; À chaque passage : oublie les fenêtres fermées, et remet devant (sans focus) celles
     ; qui ont perdu le « toujours au-dessus » (le premier réglage ne tient pas toujours).
     for hwnd, suivie in vues.Clone() {
@@ -892,6 +899,18 @@ PersoDialoguesDevant() {
                 WinSetAlwaysOnTop(1, hwnd)
         }
     }
+}
+; Installeurs (komorebi les ignore, ils passaient derrière les tuiles) : MSI, Inno Setup,
+; WiX, InstallShield par leur classe ; NSIS et les autres par le nom du processus ou le
+; titre (« …Setup.exe », « unins000.exe », « Installation de … »).
+PersoEstInstalleur(hwnd, classe) {
+    static classes := '|MsiDialogCloseClass|MsiDialogNoCloseClass|TWizardForm|TSetupForm|TSelectLanguageForm|TNewDiskForm|WixStdBA|InstallShield_Win|'
+    if InStr(classes, '|' classe '|')
+        return true
+    exe := WinGetProcessName(hwnd)
+    if RegExMatch(exe, 'i)^(msiexec\.exe|unins\d*\.exe|.*(setup|install).*\.exe)$')
+        return true
+    return (classe = '#32770' && RegExMatch(WinGetTitle(hwnd), 'i)setup|install|désinstall|uninstall|assistant d|wizard'))
 }
 PersoCentre(hwnd) {
     WinGetPos(&x, &y, &l, &h, hwnd)

@@ -176,6 +176,43 @@ Send '#v'
     Ok "Lanceur presse-papiers (Win+V) : $ahk"
 }
 
+# Widget « disques » de la barre YASB : % des disques locaux, détail réseau en bulle.
+function Write-DisquesScript {
+    $ps1 = Join-Path $Perso 'disques.ps1'
+    New-Item -ItemType Directory -Force $Perso | Out-Null
+    Write-Utf8Bom $ps1 @'
+# Lancé par le widget « disques » de la barre YASB (setup-winarchy.ps1), en arrière-plan.
+# Sortie JSON : local (barre), reseau (libellé alternatif), detail (bulle).
+[Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)
+$icLocal = [char]::ConvertFromUtf32(0xF02CA)    # nf-md-harddisk
+$icReseau = [char]::ConvertFromUtf32(0xF0870)   # nf-md-folder_network
+function Taille([double]$o) { if ($o -ge 1TB) { '{0:0.#} To' -f ($o / 1TB) } else { '{0:0} Go' -f ($o / 1GB) } }
+# Win32_LogicalDisk : un seul appel, borné par un délai (un partage injoignable ne bloque pas).
+$disques = @(Get-CimInstance Win32_LogicalDisk -Filter 'DriveType=3 OR DriveType=4' -OperationTimeoutSec 8 -ErrorAction SilentlyContinue)
+$local = @(); $reseau = @(); $detail = @()
+foreach ($d in ($disques | Sort-Object DeviceID)) {
+    $lettre = $d.DeviceID.TrimEnd(':')
+    $nom = if ($d.DriveType -eq 4) { "$($d.VolumeName) ($($d.ProviderName))" } else { $d.VolumeName }
+    if ($d.Size -gt 0 -and $null -ne $d.FreeSpace) {
+        $pct = [int][math]::Round(100 * ($d.Size - $d.FreeSpace) / $d.Size)
+        $court = "$lettre $pct%"
+        $detail += "$($d.DeviceID) $nom : $pct % utilisé, $(Taille $d.FreeSpace) libres sur $(Taille $d.Size)"
+    } else {
+        $court = "$lettre ?"
+        $detail += "$($d.DeviceID) $nom : injoignable"
+    }
+    if ($d.DriveType -eq 4) { $reseau += $court } else { $local += $court }
+}
+if (-not $disques) { $detail = @('Disques : lecture impossible (délai dépassé)') }
+[pscustomobject]@{
+    local  = "$icLocal " + $(if ($local) { $local -join '  ' } else { '?' })
+    reseau = "$icReseau " + $(if ($reseau) { $reseau -join '  ' } else { 'aucun' })
+    detail = $detail -join "`n"
+} | ConvertTo-Json -Compress
+'@
+    Ok "Script disques (barre YASB) : $ps1"
+}
+
 # Les raccourcis Claude Desktop ouvrent la version Store (AppID Claude_pzs8sxrjxfjjc).
 function Test-ClaudeDesktop {
     if (Get-StartApps -ErrorAction SilentlyContinue | Where-Object { $_.Name -eq 'Claude' }) { Ok 'Claude Desktop installé' }
@@ -311,6 +348,7 @@ function Install-Raccourcis([string]$Root) {
     Write-ClaudeLauncher
     Write-ScreenpressoLauncher
     Write-PressePapiersLauncher
+    Write-DisquesScript
     Test-ClaudeDesktop
     $shell = if (Get-Command pwsh -ErrorAction SilentlyContinue) { 'pwsh' } else { 'powershell' }
 
@@ -914,35 +952,38 @@ function Edit-ModeleYasb([string]$t) {
 '@).Replace('VIDE', [string][char]0xF014).Replace('PLEINE', [string][char]0xF1F8) -replace '\r?\n', $(if ($t -match "`r`n") { "`r`n" } else { "`n" })
         $t = [regex]::Replace($t, '(?m)^(?=  tool_region:)', $bloc.Replace('$', '$$'), 1)
     }
-    # Espace disque (widget natif YASB), après la mémoire : C: dans la barre, C: + D: au clic.
-    # (YASB : update_interval en secondes, pas de group_label.enabled ; corrige un ancien patch.)
-    $t = [regex]::Replace($t, '(?m)^(      update_interval: )60000(\r?\n      group_label:\r?\n)        enabled: true\r?\n', '${1}60${2}')
-    if ($t -notmatch '(?m)^  disk:') {
-        if ($t -notmatch '"cpu", "memory"' -or $t -notmatch '(?m)^  memory:') { throw 'ancre disk absente' }
-        $t = $t.Replace('"cpu", "memory"', '"cpu", "memory", "disk"')
-        $bloc = (@'
-  # Espace disque (perso, setup-winarchy.ps1) : clic = C: et D:, milieu = Go, droit = Explorateur.
-  disk:
-    type: "yasb.disk.DiskWidget"
+    # Espace disque : widget natif yasb.disk.DiskWidget abandonné (lecture synchrone sur le
+    # fil de la barre : un partage réseau injoignable la gèlerait) ; on retire l'ancien bloc.
+    $t = [regex]::Replace($t, '(?ms)^  # Espace disque \(perso[^\r\n]*\r?\n  disk:\r?\n.*?\r?\n\r?\n', '')
+    $t = $t.Replace('"memory", "disk"', '"memory"')
+    # Disques : script en arrière-plan (CustomWidget) ; barre = disques locaux en %,
+    # bulle = détail de tous les disques (réseau compris), clic droit/milieu = disques réseau.
+    if ($t -notmatch '(?m)^  disques:') {
+        if ($t -notmatch '"cpu", "memory"' -or $t -notmatch '(?m)^  memory:') { throw 'ancre disques absente' }
+        $t = $t.Replace('"cpu", "memory"', '"cpu", "memory", "disques"')
+        $bloc = @'
+  # Disques (perso, setup-winarchy.ps1) : barre = locaux en %, survol = détail (réseau compris),
+  # clic = Ce PC, droit/milieu = disques réseau. {data[...]} hors <span> (sinon pas substitué).
+  disques:
+    type: "yasb.custom.CustomWidget"
     options:
-      label: "<span>ICONE</span> {space[used][percent]}"
-      label_alt: "<span>ICONE</span> {space[free][gb]} libres"
-      volume_label: "C"
-      decimal_display: 0
-      update_interval: 60
-      group_label:
-        volume_labels: ["C", "D"]
-        show_label_name: true
-        blur: true
-        round_corners: true
-        alignment: "right"
-        direction: "down"
+      class_name: "disques-widget"
+      label: "{data[local]}"
+      label_alt: "{data[reseau]}"
+      tooltip: true
+      tooltip_label: "{data[detail]}"
+      exec_options:
+        run_cmd: 'powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%USERPROFILE%\.winarchy-perso\disques.ps1"'
+        run_interval: 60000
+        return_format: "json"
+        use_shell: true
+        encoding: "utf-8"
       callbacks:
-        on_left: "toggle_group"
+        on_left: "exec explorer.exe shell:MyComputerFolder"
         on_middle: "toggle_label"
-        on_right: "open_explorer"
+        on_right: "toggle_label"
 
-'@).Replace('ICONE', [char]::ConvertFromUtf32(0xF02CA)) -replace '\r?\n', $(if ($t -match "`r`n") { "`r`n" } else { "`n" })
+'@ -replace '\r?\n', $(if ($t -match "`r`n") { "`r`n" } else { "`n" })
         $t = [regex]::Replace($t, '(?m)^(?=  memory:)', $bloc.Replace('$', '$$'), 1)
     }
     # Indicateur des fenêtres ouvertes (icônes cliquables) après l'icône de layout.

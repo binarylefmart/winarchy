@@ -602,3 +602,11 @@
 .ai-grouper .widget,
 .system-grouper .widget,
 .connections-grouper .widget { padding: 0 6px; }
+
+/* Popups opaques (perso, setup-winarchy.ps1) : Bluetooth, volume */
+.bluetooth-menu,
+.audio-menu {
+    background-color: {{colors.background}};
+    border: 1px solid {{colors.color8}};
+    color: {{colors.foreground}};
+}

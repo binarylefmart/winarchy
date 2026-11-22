@@ -1466,6 +1466,17 @@ function Edit-ModeleYasbStyles([string]$t) {
 .system-grouper .widget,
 .connections-grouper .widget { padding: 0 6px; }
 '@ + "`n") -replace '\r?\n', $nl
+    # Popups Bluetooth et volume : transparents d'origine (illisibles) → même fond que wifi/home.
+    $t = [regex]::Replace($t, '(?ms)\r?\n\r?\n/\* Popups opaques \(perso, setup-winarchy\.ps1\).*?(?=\r?\n\r?\n|\s*\z)', '')
+    $t = ($t.TrimEnd() + "`n`n" + @'
+/* Popups opaques (perso, setup-winarchy.ps1) : Bluetooth, volume */
+.bluetooth-menu,
+.audio-menu {
+    background-color: {{colors.background}};
+    border: 1px solid {{colors.color8}};
+    color: {{colors.foreground}};
+}
+'@ + "`n") -replace '\r?\n', $nl
     if ($t -match '\.taskbar-widget') { return $t }
     ($t.TrimEnd() + "`n`n" + @'
 /* Fenêtres ouvertes (perso, setup-winarchy.ps1) */

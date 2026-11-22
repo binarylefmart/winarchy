@@ -492,80 +492,14 @@ PersoSurveilleSurvol() {
     DllCall('SystemParametersInfo', 'UInt', 0x2003, 'UInt', 0, 'Ptr', 150, 'UInt', 3)  ; après 150 ms
 }
 
-; --- Boîtes de dialogue toujours devant ------------------------------------------
-; Le focus au survol remonte les tuiles devant les boîtes de dialogue (confirmation de
-; suppression, remplacement de fichier, Propriétés...) : à leur apparition, on les met
-; au-dessus jusqu'à leur fermeture et on les active. Fenêtres #32770 RATTACHÉES à une
-; autre (vraies boîtes de dialogue, pas les fenêtres principales de vieilles applis), et
-; TOUTES celles de l'Explorateur (« Supprimer plusieurs éléments » n'est rattachée à
-; rien). La progression de copie/suppression de l'Explorateur reste devant
-; sans voler le focus. Les installeurs aussi (voir PersoEstInstalleur). Les « Propriétés » de l'Explorateur sont en plus centrées
-; (komorebi refuse de les tuiler) ; toutes restent déplaçables.
-SetTimer(PersoDialoguesDevant, 250)
-PersoDialoguesDevant() {
-    static vues := Map()                             ; hwnd -> 1 suivie (garder devant), 0 ignorée
-    for hwnd in WinGetList() {
-        if vues.Has(hwnd)
-            continue
-        vues[hwnd] := 0
-        try {
-            classe := WinGetClass(hwnd)
-            if (classe = 'OperationStatusWindow') {
-                vues[hwnd] := 1                          ; progression : devant, sans focus
-                continue
-            }
-            if (WinGetExStyle(hwnd) & 0x80)              ; WS_EX_TOOLWINDOW : pas une vraie fenêtre
-                continue
-            installeur := PersoEstInstalleur(hwnd, classe)
-            if (classe != '#32770' && !installeur)
-                continue
-            explorateur := (WinGetProcessName(hwnd) = 'explorer.exe')
-            if (!installeur && !explorateur && !DllCall('GetWindow', 'Ptr', hwnd, 'UInt', 4, 'Ptr'))   ; GW_OWNER : pas rattachée
-                continue
-            vues[hwnd] := 1
-            titre := WinGetTitle(hwnd)
-            if (explorateur && (InStr(titre, 'Propriétés') || InStr(titre, 'Properties')))
-                PersoCentre(hwnd)
-            WinSetAlwaysOnTop(1, hwnd)
-            WinActivate(hwnd)
-        }
-    }
-    ; À chaque passage : oublie les fenêtres fermées, et remet devant (sans focus) celles
-    ; qui ont perdu le « toujours au-dessus » (le premier réglage ne tient pas toujours).
-    for hwnd, suivie in vues.Clone() {
-        if !WinExist(hwnd) {
-            vues.Delete(hwnd)
-            continue
-        }
-        if !suivie
-            continue
-        try {
-            if !(WinGetExStyle(hwnd) & 0x8)                  ; WS_EX_TOPMOST
-                WinSetAlwaysOnTop(1, hwnd)
-        }
-    }
-}
-; Installeurs (komorebi les ignore, ils passaient derrière les tuiles) : MSI, Inno Setup,
-; WiX, InstallShield par leur classe ; NSIS et les autres par le nom du processus ou le
-; titre (« …Setup.exe », « unins000.exe », « Installation de … »).
-PersoEstInstalleur(hwnd, classe) {
-    static classes := '|MsiDialogCloseClass|MsiDialogNoCloseClass|TWizardForm|TSetupForm|TSelectLanguageForm|TNewDiskForm|WixStdBA|InstallShield_Win|'
-    if InStr(classes, '|' classe '|')
-        return true
-    exe := WinGetProcessName(hwnd)
-    if RegExMatch(exe, 'i)^(msiexec\.exe|unins\d*\.exe|.*(setup|install).*\.exe)$')
-        return true
-    return (classe = '#32770' && RegExMatch(WinGetTitle(hwnd), 'i)setup|install|désinstall|uninstall|assistant d|wizard'))
-}
-PersoCentre(hwnd) {
-    WinGetPos(&x, &y, &l, &h, hwnd)
-    ecran := MonitorGetPrimary()                     ; écran qui contient le centre de la fenêtre
-    Loop MonitorGetCount() {
-        MonitorGet(A_Index, &g, &t, &d, &b)
-        if (x + l // 2 >= g && x + l // 2 < d && y + h // 2 >= t && y + h // 2 < b)
-            ecran := A_Index
-    }
-    MonitorGetWorkArea(ecran, &g, &t, &d, &b)
-    WinMove(g + (d - g - l) // 2, t + (b - t - h) // 2, , , hwnd)
+; --- Boîtes de dialogue et installeurs toujours devant --------------------------
+; Dans un script à part (~\.winarchy-perso\devant.ahk, écrit par setup-winarchy.ps1),
+; lancé avec AutoHotkey64_UIA.exe (UI Access) : sans ça Windows interdit de mettre
+; devant les fenêtres lancées en administrateur (installeurs Inno Setup, MSI…).
+; Relancé (et donc remplacé) à chaque démarrage de winarchy.ahk.
+PersoLanceDevant()
+PersoLanceDevant() {
+    uia := RegExReplace(A_AhkPath, 'i)\.exe$', '_UIA.exe')
+    try Run('"' (FileExist(uia) ? uia : A_AhkPath) '" "' EnvGet('USERPROFILE') '\.winarchy-perso\devant.ahk"')
 }
 ; <<< raccourcis-perso <<<

@@ -100,6 +100,11 @@ PersoDialoguesDevant() {
             }
             if (WinGetExStyle(hwnd) & 0x80)              ; WS_EX_TOOLWINDOW : pas une vraie fenêtre
                 continue
+            if PersoEstNotification(hwnd, classe) {      ; notification : devant, sans focus
+                vues[hwnd] := 1
+                WinSetAlwaysOnTop(1, hwnd)
+                continue
+            }
             installeur := PersoEstInstalleur(hwnd, classe)
             if (classe != '#32770' && !installeur)
                 continue
@@ -129,6 +134,16 @@ PersoDialoguesDevant() {
         }
     }
 }
+; Notifications que komorebi ignore et qui passaient derrière les tuiles : popups de
+; Steam (toutes ses fenêtres sauf la principale « Steam » : offres spéciales, toasts,
+; amis…) et rappels Outlook. Mises devant sans voler le focus.
+PersoEstNotification(hwnd, classe) {
+    exe := WinGetProcessName(hwnd)
+    titre := WinGetTitle(hwnd)
+    if (exe = 'steamwebhelper.exe')
+        return (titre != 'Steam' && titre != '')
+    return (exe = 'OUTLOOK.EXE' && RegExMatch(titre, 'i)^\d+ (rappel|reminder)'))
+}
 ; Installeurs (komorebi les ignore, ils passaient derrière les tuiles) : MSI, Inno Setup,
 ; WiX, InstallShield par leur classe ; NSIS et les autres par le nom du processus ou le
 ; titre (« …Setup.exe », « unins000.exe », « Installation de … »).
@@ -137,9 +152,9 @@ PersoEstInstalleur(hwnd, classe) {
     if InStr(classes, '|' classe '|')
         return true
     exe := WinGetProcessName(hwnd)
-    if RegExMatch(exe, 'i)^(msiexec\.exe|unins\d*\.exe|.*(setup|install).*\.exe)$')
+    if RegExMatch(exe, 'i)^(msiexec\.exe|unins\d*\.exe|.*(setup|install|updat).*\.exe)$')
         return true
-    return (classe = '#32770' && RegExMatch(WinGetTitle(hwnd), 'i)setup|install|désinstall|uninstall|assistant d|wizard'))
+    return (classe = '#32770' && RegExMatch(WinGetTitle(hwnd), 'i)setup|install|désinstall|uninstall|assistant d|wizard|updat|mise à jour'))
 }
 PersoCentre(hwnd) {
     WinGetPos(&x, &y, &l, &h, hwnd)

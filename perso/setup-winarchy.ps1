@@ -295,7 +295,13 @@ function Err([string]$m)  { Write-Host "  XX  $m" -ForegroundColor Red }
 
 function Write-Utf8Bom([string]$path, [string]$text) {
     $text = $text -replace "`r?`n", "`r`n"
-    [IO.File]::WriteAllText($path, $text, (New-Object Text.UTF8Encoding $true))
+    # Inchangé : on ne touche pas au fichier (les scripts de la barre YASB peuvent être en cours
+    # d'exécution, donc verrouillés). Sinon on réessaie quelques fois si le fichier est occupé.
+    if ((Test-Path $path) -and [IO.File]::ReadAllText($path) -ceq $text) { return }
+    for ($i = 1; ; $i++) {
+        try { [IO.File]::WriteAllText($path, $text, (New-Object Text.UTF8Encoding $true)); return }
+        catch { if ($i -ge 10) { throw }; Start-Sleep -Milliseconds 300 }
+    }
 }
 
 function Assert-PasAdmin {

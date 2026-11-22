@@ -849,7 +849,7 @@ PersoSurveilleSurvol() {
 
 ; --- Fenêtres « Propriétés » de l'Explorateur centrées ---------------------------
 ; komorebi refuse de les tuiler (fenêtre attachée à l'Explorateur, taille fixe) : à leur
-; ouverture, on les centre une seule fois sur leur écran (déplaçables ensuite).
+; ouverture, on les centre une seule fois sur leur écran (déplaçables ensuite), toujours au-dessus.
 SetTimer(PersoCentreProprietes, 250)
 PersoCentreProprietes() {
     static vues := Map()
@@ -870,6 +870,9 @@ PersoCentreProprietes() {
             }
             MonitorGetWorkArea(ecran, &g, &t, &d, &b)
             WinMove(g + (d - g - l) // 2, t + (b - t - h) // 2, , , hwnd)
+            ; Toujours au-dessus : sinon le focus au survol remonte les tuiles devant elle.
+            WinSetAlwaysOnTop(1, hwnd)
+            WinActivate(hwnd)
         }
     }
     for hwnd in [vues*]                              ; oublie les fenêtres fermées

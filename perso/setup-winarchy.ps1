@@ -850,9 +850,10 @@ PersoSurveilleSurvol() {
 ; --- Boîtes de dialogue toujours devant ------------------------------------------
 ; Le focus au survol remonte les tuiles devant les boîtes de dialogue (confirmation de
 ; suppression, remplacement de fichier, Propriétés...) : à leur apparition, on les met
-; au-dessus jusqu'à leur fermeture et on les active. Seulement les fenêtres #32770
-; RATTACHÉES à une autre (vraies boîtes de dialogue, pas les fenêtres principales de
-; vieilles applis). La progression de copie/suppression de l'Explorateur reste devant
+; au-dessus jusqu'à leur fermeture et on les active. Fenêtres #32770 RATTACHÉES à une
+; autre (vraies boîtes de dialogue, pas les fenêtres principales de vieilles applis), et
+; TOUTES celles de l'Explorateur (« Supprimer plusieurs éléments » n'est rattachée à
+; rien). La progression de copie/suppression de l'Explorateur reste devant
 ; sans voler le focus. Les « Propriétés » de l'Explorateur sont en plus centrées
 ; (komorebi refuse de les tuiler) ; toutes restent déplaçables.
 SetTimer(PersoDialoguesDevant, 250)
@@ -863,10 +864,11 @@ PersoDialoguesDevant() {
             continue
         vues[hwnd] := 1
         try {
-            if !DllCall('GetWindow', 'Ptr', hwnd, 'UInt', 4, 'Ptr')     ; GW_OWNER : pas rattachée
+            explorateur := (WinGetProcessName(hwnd) = 'explorer.exe')
+            if (!explorateur && !DllCall('GetWindow', 'Ptr', hwnd, 'UInt', 4, 'Ptr'))   ; GW_OWNER : pas rattachée
                 continue
             titre := WinGetTitle(hwnd)
-            if (WinGetProcessName(hwnd) = 'explorer.exe' && (InStr(titre, 'Propriétés') || InStr(titre, 'Properties')))
+            if (explorateur && (InStr(titre, 'Propriétés') || InStr(titre, 'Properties')))
                 PersoCentre(hwnd)
             WinSetAlwaysOnTop(1, hwnd)
             WinActivate(hwnd)

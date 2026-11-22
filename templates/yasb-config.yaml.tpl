@@ -327,28 +327,24 @@ widgets:
   # (watcher residente, ver ese script para el porqué). Tradeoff: sin selector de
   # redes en la barra; el click abre la config de red de Windows.
   wifi:
+    # Réseau (perso, setup-winarchy.ps1) : icône = state\net-icon.flag, bulle = reseau.ps1.
     type: "yasb.custom.CustomWidget"
     options:
       class_name: "wifi-widget"
-      # OJO: el {data} va SIN <span> envolvente. YASB NO sustituye {data} si está
-      # dentro de <span> (lo deja literal en la barra); el estilo viene por
-      # `.wifi-widget .label` en styles.css. El icono ya es el dato, no hay glifo
-      # estático que meter en un span.
-      label: "{data}"
-      label_alt: "{data}"
+      label: "{data[icone]}"
+      label_alt: "{data[icone]}"
+      label_placeholder: "…"
+      tooltip: true
+      tooltip_label: "{data[detail]}"
       exec_options:
-        # cmd, NO powershell: el glifo lo mantiene actualizado scripts\Start-NetIcon.ps1
-        # (watcher residente del autostart, ver Autostart.ps1) escribiendo a
-        # state\net-icon.flag; acá solo se lee, mismo patrón que game_mode/stay_awake.
-        # use_shell expande %KOMOREBI_CONFIG_HOME%.
-        run_cmd: 'cmd.exe /c if exist %KOMOREBI_CONFIG_HOME%\..\..\state\net-icon.flag type %KOMOREBI_CONFIG_HOME%\..\..\state\net-icon.flag'
+        run_cmd: 'powershell.exe -NoProfile -ExecutionPolicy Bypass -File %USERPROFILE%\.winarchy-perso\reseau.ps1'
         run_interval: 15000
-        return_format: "string"
+        return_format: "json"
         use_shell: true
+        encoding: "utf-8"
       callbacks:
         on_left: "exec cmd.exe /c start ms-settings:network"
         on_right: "exec cmd.exe /c start ms-settings:network"
-
   # Click: Configuración de bluetooth de Windows.
   bluetooth:
     type: "yasb.bluetooth.BluetoothWidget"

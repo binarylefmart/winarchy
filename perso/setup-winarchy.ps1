@@ -515,6 +515,53 @@ $json
     Ok "Script perf (barre YASB) : $ps1"
 }
 
+# Widget réseau (wifi) de la barre YASB : l'icône vient toujours du watcher de Winarchy
+# (state\net-icon.flag) ; reseau.ps1 ajoute la bulle (connexion active, IP, débit, VPN).
+function Write-ReseauScript {
+    $ps1 = Join-Path $Perso 'reseau.ps1'
+    New-Item -ItemType Directory -Force $Perso | Out-Null
+    Write-Utf8Bom $ps1 @'
+# Lancé par le widget « wifi » de la barre YASB (setup-winarchy.ps1), en arrière-plan.
+# Sortie JSON : icone (barre, écrite par le watcher Start-NetIcon.ps1 de Winarchy), detail (bulle).
+[Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)
+$flag = Join-Path $env:KOMOREBI_CONFIG_HOME '..\..\state\net-icon.flag'
+$icone = if (Test-Path $flag) { ([IO.File]::ReadAllText($flag, [Text.Encoding]::UTF8)).Trim() } else { [char]::ConvertFromUtf32(0xF092E) }
+function Debit([double]$o) { $b = $o * 8; if ($b -ge 1e6) { '{0:0.0} Mb/s' -f ($b / 1e6) } else { '{0:0} kb/s' -f ($b / 1e3) } }
+function Vitesse([double]$b) { if ($b -ge 1e9) { '{0:0.#} Gb/s' -f ($b / 1e9) } else { '{0:0} Mb/s' -f ($b / 1e6) } }
+$detail = @()
+# Connexion active = route par défaut de plus faible métrique.
+$route = Get-CimInstance Win32_IP4RouteTable -Filter "Destination='0.0.0.0'" -ErrorAction SilentlyContinue | Sort-Object Metric1 | Select-Object -First 1
+$configs = @(Get-CimInstance Win32_NetworkAdapterConfiguration -Filter 'IPEnabled=TRUE' -ErrorAction SilentlyContinue)
+if ($route) {
+    $cfg = $configs | Where-Object InterfaceIndex -eq $route.InterfaceIndex | Select-Object -First 1
+    $ad = Get-CimInstance Win32_NetworkAdapter -Filter "InterfaceIndex=$($route.InterfaceIndex)" -ErrorAction SilentlyContinue
+    $wifi = $false
+    $w = netsh wlan show interfaces 2>$null
+    $ssid = ($w | Select-String '^\s*SSID\s*:\s*(.+)$' | Select-Object -First 1).Matches.Groups[1].Value
+    $signal = ($w | Select-String '^\s*Signal\s*:\s*(\d+)' | Select-Object -First 1).Matches.Groups[1].Value
+    if ($ssid -and $cfg.Description -match 'Wi-?Fi|Wireless|WLAN|802\.11') { $wifi = $true }
+    $detail += if ($wifi) { "Wi-Fi : $ssid ($signal %)" } else { "Ethernet : $($ad.NetConnectionID)" }
+    $detail += "Carte : $($cfg.Description)"
+    if ($ad.Speed) { $detail += "Vitesse du lien : $(Vitesse $ad.Speed)" }
+    $ipv4 = @($cfg.IPAddress | Where-Object { $_ -match '^\d+\.' })
+    $detail += "Adresse IP : $($ipv4 -join ', ')"
+    $detail += "Passerelle : $($route.NextHop)"
+    if ($cfg.DNSServerSearchOrder) { $detail += "DNS : $($cfg.DNSServerSearchOrder -join ', ')" }
+    # Débit instantané (le compteur remplace ( ) par [ ] dans le nom de la carte).
+    $inst = $cfg.Description.Replace('(', '[').Replace(')', ']')
+    $n = Get-CimInstance Win32_PerfFormattedData_Tcpip_NetworkInterface -ErrorAction SilentlyContinue | Where-Object Name -eq $inst | Select-Object -First 1
+    if ($n) { $detail += "Débit : ↓ $(Debit $n.BytesReceivedPersec)  ↑ $(Debit $n.BytesSentPersec)" }
+} else {
+    $detail += 'Pas de connexion réseau'
+}
+# VPN actifs (tunnels avec une adresse IP).
+$vpn = @($configs | Where-Object { $_.Description -match 'WireGuard|OpenVPN|TAP-|Wintun|VPN|Tailscale|ZeroTier' } | ForEach-Object { "$($_.Description) ($((@($_.IPAddress | Where-Object { $_ -match '^\d+\.' })) -join ', '))" })
+if ($vpn) { $detail += "VPN : $($vpn -join ' ; ')" }
+[pscustomobject]@{ icone = $icone; detail = $detail -join "`n" } | ConvertTo-Json -Compress
+'@
+    Ok "Script réseau (barre YASB) : $ps1"
+}
+
 # Les raccourcis Claude Desktop ouvrent la version Store (AppID Claude_pzs8sxrjxfjjc).
 function Test-ClaudeDesktop {
     if (Get-StartApps -ErrorAction SilentlyContinue | Where-Object { $_.Name -eq 'Claude' }) { Ok 'Claude Desktop installé' }
@@ -702,6 +749,7 @@ function Install-Raccourcis([string]$Root) {
     Write-PressePapiersLauncher
     Write-DisquesScript
     Write-PerfScript
+    Write-ReseauScript
     Write-DevantScript
     Test-ClaudeDesktop
     $shell = if (Get-Command pwsh -ErrorAction SilentlyContinue) { 'pwsh' } else { 'powershell' }
@@ -1517,6 +1565,33 @@ function Edit-ModeleYasb([string]$t) {
         $b = ($modelePerf.Replace('CLE', $w[0]).Replace('CLASSE', $w[1]).Replace('DONNEE', $w[2]).Replace('COMMANDE', $w[3]).Replace('INTERVALLE', [string]$w[4])) -replace '\r?\n', $nlY
         $t = [regex]::Replace($t, $rx, $b.Replace('$', '$$'), 1)
     }
+    # Réseau : même icône (watcher de Winarchy), plus une bulle (connexion, IP, débit, VPN)
+    # calculée par reseau.ps1. Bloc « wifi » remplacé sur place.
+    $rx = '(?m)^  wifi:\r?\n(?:(?:    [^\r\n]*)?\r?\n)*'
+    if ($t -notmatch $rx) { throw 'ancre réseau (wifi) absente' }
+    $b = @'
+  wifi:
+    # Réseau (perso, setup-winarchy.ps1) : icône = state\net-icon.flag, bulle = reseau.ps1.
+    type: "yasb.custom.CustomWidget"
+    options:
+      class_name: "wifi-widget"
+      label: "{data[icone]}"
+      label_alt: "{data[icone]}"
+      label_placeholder: "…"
+      tooltip: true
+      tooltip_label: "{data[detail]}"
+      exec_options:
+        run_cmd: 'powershell.exe -NoProfile -ExecutionPolicy Bypass -File %USERPROFILE%\.winarchy-perso\reseau.ps1'
+        run_interval: 15000
+        return_format: "json"
+        use_shell: true
+        encoding: "utf-8"
+      callbacks:
+        on_left: "exec cmd.exe /c start ms-settings:network"
+        on_right: "exec cmd.exe /c start ms-settings:network"
+
+'@ -replace '\r?\n', $nlY
+    $t = [regex]::Replace($t, $rx, $b.Replace('$', '$$'), 1)
     # Indicateur des fenêtres ouvertes (icônes cliquables) après l'icône de layout.
     if ($t -notmatch 'yasb\.taskbar\.TaskbarWidget') {
         if ($t -notmatch '"komorebi_active_layout", ' -or $t -notmatch '(?m)^  komorebi_workspaces:') { throw 'ancre taskbar absente' }

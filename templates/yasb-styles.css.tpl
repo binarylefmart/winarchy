@@ -593,3 +593,7 @@
     padding: 6px 10px;
     font-size: 12px;
 }
+
+/* Disques (perso, setup-winarchy.ps1) : locaux = couleur système, réseau = couleur réseau */
+.disques-widget .label { color: {{ui.system}}; }
+.disques-reseau-widget .label { color: {{ui.net}}; }

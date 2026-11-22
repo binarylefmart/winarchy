@@ -536,9 +536,9 @@ if ($route) {
     $cfg = $configs | Where-Object InterfaceIndex -eq $route.InterfaceIndex | Select-Object -First 1
     $ad = Get-CimInstance Win32_NetworkAdapter -Filter "InterfaceIndex=$($route.InterfaceIndex)" -ErrorAction SilentlyContinue
     $wifi = $false
-    $w = netsh wlan show interfaces 2>$null
-    $ssid = ($w | Select-String '^\s*SSID\s*:\s*(.+)$' | Select-Object -First 1).Matches.Groups[1].Value
-    $signal = ($w | Select-String '^\s*Signal\s*:\s*(\d+)' | Select-Object -First 1).Matches.Groups[1].Value
+    $w = (netsh wlan show interfaces 2>$null) -join "`n"
+    $ssid = if ($w -match '(?m)^\s*SSID\s*:\s*(.+?)\s*$') { $Matches[1] }
+    $signal = if ($w -match '(?m)^\s*Signal\s*:\s*(\d+)') { $Matches[1] }
     if ($ssid -and $cfg.Description -match 'Wi-?Fi|Wireless|WLAN|802\.11') { $wifi = $true }
     $detail += if ($wifi) { "Wi-Fi : $ssid ($signal %)" } else { "Ethernet : $($ad.NetConnectionID)" }
     $detail += "Carte : $($cfg.Description)"

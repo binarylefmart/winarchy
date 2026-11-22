@@ -830,7 +830,7 @@ LWin up::PersoSuper(false)
 #!Down::PersoPlace('down')
 #z::PersoResize()                                 ; Mode redimensionnement
 #s::PersoCache()                                  ; Réduire la fenêtre active
-#+s::PersoRameneTout()                            ; Ramener toutes les fenêtres cachées
+#+s::PersoRameneTout()                            ; Ramener toutes les fenêtres réduites
 #p::Run('ms-settings-displays-topology:projection')   ; Projeter (menu Windows)
 #HotIf PersoResizeOn()
 Left::PersoResizePas('horizontal', 'decrease', 100)
@@ -1183,8 +1183,7 @@ PersoResizePas(axe, sens, px) {
 }
 
 ; Super+S : réduit la fenêtre active, à chaque appui (n'importe quelle fenêtre).
-; Super+Shift+S ramène toutes celles réduites ainsi.
-; Une fenêtre ramenée autrement (barre des tâches, Alt+Tab) sort de la liste.
+; Super+Shift+S ramène toutes les fenêtres réduites, quelle que soit la façon.
 PersoCachees() {
     static liste := []
     return liste
@@ -1213,16 +1212,27 @@ PersoCache() {
     WinMinimize('ahk_id ' h)
 }
 
+; Ramène TOUTES les fenêtres réduites (Super+S, bouton réduire, barre des tâches…).
+; La dernière réduite par Super+S reprend le focus, sinon la dernière ramenée.
 PersoRameneTout() {
     liste := PersoCachees()
     PersoNettoie(liste)
-    dernier := 0
-    while liste.Length {
-        dernier := liste.Pop()
-        WinRestore('ahk_id ' dernier)
+    dernier := liste.Length ? liste[liste.Length] : 0
+    DetectHiddenWindows(false)
+    ramenee := 0
+    for h in WinGetList() {
+        try {
+            if WinGetMinMax('ahk_id ' h) != -1 || PersoIgnoree(h) || WinGetTitle('ahk_id ' h) = ''
+                continue
+            if WinGetExStyle('ahk_id ' h) & 0x80          ; WS_EX_TOOLWINDOW : pas une vraie fenêtre
+                continue
+            WinRestore('ahk_id ' h)
+            ramenee := h
+        }
     }
-    if dernier
-        try WinActivate('ahk_id ' dernier)
+    liste.Length := 0
+    if (dernier || ramenee)
+        try WinActivate('ahk_id ' (dernier ? dernier : ramenee))
 }
 
 ; Exposé = Vue des tâches, ouverte par le vrai Win+Tab (son identifiant shell:::{3080F90E…}

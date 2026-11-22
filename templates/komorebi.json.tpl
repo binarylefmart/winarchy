@@ -108,6 +108,7 @@
     [ { "kind": "Exe", "id": "wezterm-gui.exe", "matching_strategy": "Equals" }, { "kind": "Class", "id": "org.wezfurlong.wezterm", "matching_strategy": "Equals" } ]
   ],
   "object_name_change_applications": [
+    { "kind": "Exe", "id": "orca-slicer.exe", "matching_strategy": "Equals" },
     { "kind": "Exe", "id": "firefox.exe", "matching_strategy": "Equals" },
     { "kind": "Exe", "id": "zen.exe", "matching_strategy": "Equals" },
     { "kind": "Exe", "id": "librewolf.exe", "matching_strategy": "Equals" },

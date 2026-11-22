@@ -1411,6 +1411,13 @@ function Edit-ModeleKomorebi([string]$t) {
     foreach ($id in 'ShareX\.exe', 'TaskManagerWindow', 'Control Panel') {
         $t = [regex]::Replace($t, "(,\s*)?\{\s*`"kind`":\s*`"\w+`",\s*`"id`":\s*`"$id`",\s*`"matching_strategy`":\s*`"Equals`"\s*\}(?(1)|,?)", '')
     }
+    # OrcaSlicer affiche sa fenêtre avant de lui donner son titre « … - OrcaSlicer » : la règle
+    # manage par titre ne s'appliquait pas. Avec object_name_change, komorebi réexamine la
+    # fenêtre quand son titre change (les panneaux internes n'ont pas ce titre : pas tuilés).
+    if ($t -notmatch '"object_name_change_applications":\s*\[[^\]]*"orca-slicer\.exe"') {
+        $t = [regex]::Replace($t, '("object_name_change_applications":\s*\[)(\r?\n)', "`$1`$2    { `"kind`": `"Exe`", `"id`": `"orca-slicer.exe`", `"matching_strategy`": `"Equals`" },`$2", 1)
+        if ($t -notmatch '"orca-slicer\.exe"') { throw '« object_name_change_applications » introuvable' }
+    }
     $t
 }
 

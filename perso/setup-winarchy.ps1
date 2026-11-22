@@ -1124,7 +1124,10 @@ function Edit-ModeleKomorebi([string]$t) {
     } else {
         $ecran = [regex]::Replace($ecran, '\{(\s*)$', "{`$1$offset`$1`"window_based_work_area_offset_limit`": 1,`$1")
     }
-    $t.Substring(0, $i) + $ecran + $t.Substring($w)
+    $t = $t.Substring(0, $i) + $ecran + $t.Substring($w)
+    # ShareX tilé comme le reste : Winarchy l'ignore d'office (ignore_rules). Ses
+    # surcouches de capture sont sans barre de titre, komorebi ne les gère pas de toute façon.
+    [regex]::Replace($t, ',\s*\{\s*"kind":\s*"Exe",\s*"id":\s*"ShareX\.exe",\s*"matching_strategy":\s*"Equals"\s*\}(?=\{\{computed\.game_ignore_rules\}\}|\s*\])', '')
 }
 
 # Barre YASB : groupes toujours dépliés, et pas de compteur Codex.

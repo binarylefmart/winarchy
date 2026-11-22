@@ -116,7 +116,6 @@
     { "kind": "Title", "id": "Winarchy — Themes", "matching_strategy": "Equals" },
     { "kind": "Class", "id": "ReunionWindowingCaptionControls", "matching_strategy": "Equals" },
     { "kind": "Class", "id": "InputNonClientPointerSource", "matching_strategy": "Equals" },
-    { "kind": "Exe", "id": "winarchy-shell.exe", "matching_strategy": "Equals" },
-    { "kind": "Exe", "id": "ShareX.exe", "matching_strategy": "Equals" }{{computed.game_ignore_rules}}
+    { "kind": "Exe", "id": "winarchy-shell.exe", "matching_strategy": "Equals" }{{computed.game_ignore_rules}}
   ]
 }

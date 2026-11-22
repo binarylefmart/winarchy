@@ -595,7 +595,9 @@
 }
 
 /* Disques (perso, setup-winarchy.ps1) : réseau = couleur réseau ; widgets des groupes espacés */
-.disques-reseau-widget .label { color: {{ui.net}}; }
+.disques-widget .label.alt { color: {{colors.foreground}}; }
+.disques-reseau-widget .label,
+.disques-reseau-widget .label.alt { color: {{ui.net}}; }
 .extras-grouper .widget,
 .ai-grouper .widget,
 .system-grouper .widget,

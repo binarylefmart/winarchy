@@ -45,7 +45,7 @@ bars:
     widgets:
       left: ["home", "komorebi_workspaces", "komorebi_active_layout", "taskbar", "active_window", "extras"]
       center: ["clock"]
-      right: ["weather", "game_mode", "stay_awake", "media", "ai", "system", "connections", "volume", "battery", "winarchy_update", "notifications", "systray", "winarchy_menu"]
+      right: ["weather", "game_mode", "stay_awake", "media", "ai", "system", "disques", "disques_reseau", "connections", "volume", "battery", "winarchy_update", "notifications", "systray", "winarchy_menu"]
     layouts:
       left:
         alignment: "left"
@@ -489,7 +489,7 @@ widgets:
     type: "yasb.grouper.GrouperWidget"
     options:
       class_name: "system-grouper"
-      widgets: ["gpu", "cpu", "memory", "disques", "disques_reseau"]
+      widgets: ["gpu", "cpu", "memory"]
       hide_empty: false
       collapse_options:
         enabled: false

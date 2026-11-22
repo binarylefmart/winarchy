@@ -965,8 +965,9 @@ function Edit-ModeleYasb([string]$t) {
     # YASB découpe run_cmd sur les espaces puis Popen réécrit les guillemets : chemin SANS guillemets.
     $t = [regex]::Replace($t, '(?m)^  # Disques[^\n]*\n(?:  #[^\n]*\n)*  disques(?:_reseau)?:\r?\n(?:(?:    [^\n]*)?\r?\n)*', '')
     $t = $t.Replace(', "disques_reseau"', '').Replace(', "disques"', '')
-    if ($t -notmatch '"cpu", "memory"' -or $t -notmatch '(?m)^  memory:') { throw 'ancre disques absente' }
-    $t = $t.Replace('"cpu", "memory"', '"cpu", "memory", "disques", "disques_reseau"')
+    # Directement dans la barre après le groupe système (même écart qu'entre les groupes).
+    if ($t -notmatch '"system", ' -or $t -notmatch '(?m)^  memory:') { throw 'ancre disques absente' }
+    $t = $t.Replace('"system", ', '"system", "disques", "disques_reseau", ')
     $modele = @'
   # Disques LIBELLE (perso, setup-winarchy.ps1) : % utilisé, survol = détail de tous les disques,
   # clic = Ce PC, droit/milieu = espace libre. {data[...]} hors <span> (sinon pas substitué).
@@ -1045,7 +1046,9 @@ function Edit-ModeleYasbStyles([string]$t) {
     $t = [regex]::Replace($t, '(?ms)\r?\n\r?\n/\* Disques \(perso, setup-winarchy\.ps1\).*?(?=\r?\n\r?\n|\s*\z)', '')
     $t = ($t.TrimEnd() + "`n`n" + @'
 /* Disques (perso, setup-winarchy.ps1) : réseau = couleur réseau ; widgets des groupes espacés */
-.disques-reseau-widget .label { color: {{ui.net}}; }
+.disques-widget .label.alt { color: {{colors.foreground}}; }
+.disques-reseau-widget .label,
+.disques-reseau-widget .label.alt { color: {{ui.net}}; }
 .extras-grouper .widget,
 .ai-grouper .widget,
 .system-grouper .widget,

@@ -1492,8 +1492,7 @@ function Edit-ModeleYasbStyles([string]$t) {
     min-height: 260px;
 }
 .bluetooth-menu .bluetooth-item {
-    padding: 8px 10px;
-    margin: 2px 0;
+    padding: 0 6px;
     border-radius: 6px;
 }
 .bluetooth-menu .bluetooth-item:hover { background-color: {{colors.color8}}; }

@@ -958,6 +958,9 @@ function Edit-ModeleYasb([string]$t) {
     $t = $t.Replace('"memory", "disk"', '"memory"')
     # Disques : script en arrière-plan (CustomWidget) ; barre = disques locaux en %,
     # bulle = détail de tous les disques (réseau compris), clic droit/milieu = disques réseau.
+    # YASB découpe run_cmd sur les espaces puis Popen réécrit les guillemets : chemin sans guillemets.
+    $t = $t.Replace('-File "%USERPROFILE%\.winarchy-perso\disques.ps1"', '-File %USERPROFILE%\.winarchy-perso\disques.ps1')
+    if ($t -match '(?m)^  disques:' -and $t -notmatch 'label_placeholder: "…"') { $t = [regex]::Replace($t, '(      label_alt: "\{data\[reseau\]\}"\r?\n)', ('${1}      label_placeholder: "…"' + $(if ($t -match "`r`n") { "`r`n" } else { "`n" }))) }
     if ($t -notmatch '(?m)^  disques:') {
         if ($t -notmatch '"cpu", "memory"' -or $t -notmatch '(?m)^  memory:') { throw 'ancre disques absente' }
         $t = $t.Replace('"cpu", "memory"', '"cpu", "memory", "disques"')
@@ -970,10 +973,11 @@ function Edit-ModeleYasb([string]$t) {
       class_name: "disques-widget"
       label: "{data[local]}"
       label_alt: "{data[reseau]}"
+      label_placeholder: "…"
       tooltip: true
       tooltip_label: "{data[detail]}"
       exec_options:
-        run_cmd: 'powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%USERPROFILE%\.winarchy-perso\disques.ps1"'
+        run_cmd: 'powershell.exe -NoProfile -ExecutionPolicy Bypass -File %USERPROFILE%\.winarchy-perso\disques.ps1'
         run_interval: 60000
         return_format: "json"
         use_shell: true

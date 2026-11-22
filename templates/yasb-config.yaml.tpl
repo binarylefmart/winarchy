@@ -240,10 +240,11 @@ widgets:
       class_name: "disques-widget"
       label: "{data[local]}"
       label_alt: "{data[reseau]}"
+      label_placeholder: "…"
       tooltip: true
       tooltip_label: "{data[detail]}"
       exec_options:
-        run_cmd: 'powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%USERPROFILE%\.winarchy-perso\disques.ps1"'
+        run_cmd: 'powershell.exe -NoProfile -ExecutionPolicy Bypass -File %USERPROFILE%\.winarchy-perso\disques.ps1'
         run_interval: 60000
         return_format: "json"
         use_shell: true

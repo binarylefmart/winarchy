@@ -1,14 +1,6 @@
 {
   "$schema": "https://raw.githubusercontent.com/LGUG2Z/komorebi/master/schema.asc.json",
-  "1Password": {
-    "ignore": [
-      {
-        "kind": "Exe",
-        "id": "1Password.exe",
-        "matching_strategy": "Equals"
-      }
-    ]
-  },
+  "1Password": {},
   "Ableton Live": {
     "ignore": [
       {
@@ -79,13 +71,6 @@
     ]
   },
   "Affinity Photo 2": {
-    "ignore": [
-      {
-        "kind": "Exe",
-        "id": "Photo.exe",
-        "matching_strategy": "Equals"
-      }
-    ],
     "manage": [
       {
         "kind": "Title",
@@ -264,24 +249,8 @@
       ]
     ]
   },
-  "Barrier": {
-    "floating": [
-      {
-        "kind": "Exe",
-        "id": "barrier.exe",
-        "matching_strategy": "Equals"
-      }
-    ]
-  },
-  "Battlestate Games Launcher": {
-    "floating": [
-      {
-        "kind": "Exe",
-        "id": "BsgLauncher.exe",
-        "matching_strategy": "Equals"
-      }
-    ]
-  },
+  "Barrier": {},
+  "Battlestate Games Launcher": {},
   "Beeper": {
     "tray_and_multi_window": [
       {
@@ -301,20 +270,6 @@
     ]
   },
   "Blender": {
-    "floating": [
-      [
-        {
-          "kind": "Exe",
-          "id": "blender.exe",
-          "matching_strategy": "Equals"
-        },
-        {
-          "kind": "Title",
-          "id": "Blender",
-          "matching_strategy": "DoesNotContain"
-        }
-      ]
-    ],
     "slow_application": [
       {
         "kind": "Exe",
@@ -359,15 +314,7 @@
       }
     ]
   },
-  "Calculator": {
-    "ignore": [
-      {
-        "kind": "Title",
-        "id": "Calculator",
-        "matching_strategy": "Equals"
-      }
-    ]
-  },
+  "Calculator": {},
   "Citrix Receiver": {
     "ignore": [
       {
@@ -425,15 +372,7 @@
       }
     ]
   },
-  "Clumsy": {
-    "floating": [
-      {
-        "kind": "Exe",
-        "id": "clumsy.exe",
-        "matching_strategy": "Equals"
-      }
-    ]
-  },
+  "Clumsy": {},
   "CopyQ": {
     "ignore": [
       {
@@ -582,15 +521,7 @@
       }
     ]
   },
-  "Dropbox": {
-    "ignore": [
-      {
-        "kind": "Exe",
-        "id": "Dropbox.exe",
-        "matching_strategy": "Equals"
-      }
-    ]
-  },
+  "Dropbox": {},
   "DS4Windows": {
     "tray_and_multi_window": [
       {
@@ -783,22 +714,7 @@
       ]
     ]
   },
-  "FreeCAD": {
-    "floating": [
-      [
-        {
-          "kind": "Exe",
-          "id": "freecad.exe",
-          "matching_strategy": "Equals"
-        },
-        {
-          "kind": "Class",
-          "id": "Qt51515QWindowIcon",
-          "matching_strategy": "Equals"
-        }
-      ]
-    ]
-  },
+  "FreeCAD": {},
   "FreeTube": {
     "tray_and_multi_window": [
       {
@@ -822,39 +738,7 @@
       ]
     ]
   },
-  "GIMP": {
-    "floating": [
-      [
-        {
-          "kind": "Exe",
-          "id": "gimp",
-          "matching_strategy": "StartsWith"
-        },
-        {
-          "kind": "Title",
-          "id": "GNU",
-          "matching_strategy": "DoesNotContain"
-        },
-        {
-          "kind": "Title",
-          "id": "GIMP",
-          "matching_strategy": "DoesNotEndWith"
-        }
-      ],
-      [
-        {
-          "kind": "Exe",
-          "id": "gimp",
-          "matching_strategy": "StartsWith"
-        },
-        {
-          "kind": "Title",
-          "id": "About GIMP",
-          "matching_strategy": "Equals"
-        }
-      ]
-    ]
-  },
+  "GIMP": {},
   "GitHub Credential Manager": {
     "ignore": [
       {
@@ -954,13 +838,6 @@
     ]
   },
   "Google Drive": {
-    "ignore": [
-      {
-        "kind": "Exe",
-        "id": "GoogleDriveFS.exe",
-        "matching_strategy": "Equals"
-      }
-    ],
     "tray_and_multi_window": [
       {
         "kind": "Exe",
@@ -1131,42 +1008,6 @@
         "id": "ida64.exe",
         "matching_strategy": "Equals"
       }
-    ],
-    "floating": [
-      [
-        {
-          "kind": "Exe",
-          "id": "ida.exe",
-          "matching_strategy": "Equals"
-        },
-        {
-          "kind": "Title",
-          "id": "IDA -",
-          "matching_strategy": "DoesNotStartWith"
-        },
-        {
-          "kind": "Title",
-          "id": "IDA v",
-          "matching_strategy": "DoesNotStartWith"
-        }
-      ],
-      [
-        {
-          "kind": "Exe",
-          "id": "ida64.exe",
-          "matching_strategy": "Equals"
-        },
-        {
-          "kind": "Title",
-          "id": "IDA -",
-          "matching_strategy": "DoesNotStartWith"
-        },
-        {
-          "kind": "Title",
-          "id": "IDA v",
-          "matching_strategy": "DoesNotStartWith"
-        }
-      ]
     ]
   },
   "IntelliJ IDEA": {
@@ -1337,15 +1178,7 @@
       }
     ]
   },
-  "Line": {
-    "floating": [
-      {
-        "kind": "Exe",
-        "id": "LineMediaPlayer.exe",
-        "matching_strategy": "Equals"
-      }
-    ]
-  },
+  "Line": {},
   "LocalSend": {
     "tray_and_multi_window": [
       {
@@ -1355,15 +1188,7 @@
       }
     ]
   },
-  "Logi Bolt": {
-    "ignore": [
-      {
-        "kind": "Exe",
-        "id": "LogiBolt.exe",
-        "matching_strategy": "Equals"
-      }
-    ]
-  },
+  "Logi Bolt": {},
   "Logitech G HUB": {
     "tray_and_multi_window": [
       {
@@ -1373,23 +1198,8 @@
       }
     ]
   },
-  "Logitech Options": {
-    "ignore": [
-      {
-        "kind": "Exe",
-        "id": "LogiOptionsUI.exe",
-        "matching_strategy": "Equals"
-      }
-    ]
-  },
+  "Logitech Options": {},
   "LogiTune": {
-    "ignore": [
-      {
-        "kind": "Exe",
-        "id": "LogiTune.exe",
-        "matching_strategy": "Equals"
-      }
-    ],
     "tray_and_multi_window": [
       {
         "kind": "Exe",
@@ -1473,15 +1283,7 @@
       ]
     ]
   },
-  "MicMute": {
-    "floating": [
-      {
-        "kind": "Exe",
-        "id": "MicMute.exe",
-        "matching_strategy": "Equals"
-      }
-    ]
-  },
+  "MicMute": {},
   "Microsoft Active Accessibility": {
     "ignore": [
       {
@@ -1523,15 +1325,7 @@
       }
     ]
   },
-  "Microsoft IME Pad": {
-    "floating": [
-      {
-        "kind": "Exe",
-        "id": "IMEPADSV.EXE",
-        "matching_strategy": "Equals"
-      }
-    ]
-  },
+  "Microsoft IME Pad": {},
   "Microsoft Outlook": {
     "ignore": [
       {
@@ -1585,22 +1379,7 @@
       }
     ]
   },
-  "Microsoft SQL Server Management Studio": {
-    "floating": [
-      [
-        {
-          "kind": "Exe",
-          "id": "Ssms.exe",
-          "matching_strategy": "Equals"
-        },
-        {
-          "kind": "Class",
-          "id": "WindowsForms10.Window.8.app",
-          "matching_strategy": "StartsWith"
-        }
-      ]
-    ]
-  },
+  "Microsoft SQL Server Management Studio": {},
   "Microsoft Teams": {
     "tray_and_multi_window": [
       {
@@ -1610,20 +1389,7 @@
       }
     ]
   },
-  "Microsoft Teams classic": {
-    "ignore": [
-      {
-        "kind": "Title",
-        "id": "Microsoft Teams Notification",
-        "matching_strategy": "Legacy"
-      },
-      {
-        "kind": "Title",
-        "id": "Microsoft Teams Call",
-        "matching_strategy": "Legacy"
-      }
-    ]
-  },
+  "Microsoft Teams classic": {},
   "Microsoft Terminal Services Client": {
     "ignore": [
       {
@@ -1702,15 +1468,7 @@
       }
     ]
   },
-  "MOTU M-Series": {
-    "floating": [
-      {
-        "kind": "Exe",
-        "id": "MOTUMSeries.exe",
-        "matching_strategy": "Equals"
-      }
-    ]
-  },
+  "MOTU M-Series": {},
   "Mozilla Firefox": {
     "ignore": [
       {
@@ -1900,15 +1658,7 @@
       }
     ]
   },
-  "paint.net": {
-    "ignore": [
-      {
-        "kind": "Exe",
-        "id": "paintdotnet.exe",
-        "matching_strategy": "Equals"
-      }
-    ]
-  },
+  "paint.net": {},
   "Paradox Launcher": {
     "ignore": [
       {
@@ -1975,93 +1725,10 @@
       }
     ]
   },
-  "PowerToys": {
-    "ignore": [
-      {
-        "kind": "Exe",
-        "id": "PowerToys.ColorPickerUI.exe",
-        "matching_strategy": "Equals"
-      },
-      {
-        "kind": "Exe",
-        "id": "PowerToys.CropAndLock.exe",
-        "matching_strategy": "Equals"
-      },
-      {
-        "kind": "Exe",
-        "id": "PowerToys.ImageResizer.exe",
-        "matching_strategy": "Equals"
-      },
-      {
-        "kind": "Exe",
-        "id": "PowerToys.Peek.UI.exe",
-        "matching_strategy": "Equals"
-      },
-      {
-        "kind": "Exe",
-        "id": "PowerToys.PowerLauncher.exe",
-        "matching_strategy": "Equals"
-      },
-      {
-        "kind": "Exe",
-        "id": "PowerToys.PowerAccent.exe",
-        "matching_strategy": "Equals"
-      },
-      {
-        "kind": "Exe",
-        "id": "PowerToys.AdvancedPaste.exe",
-        "matching_strategy": "Equals"
-      },
-      {
-        "kind": "Exe",
-        "id": "PowerToys.FileLocksmithUI.exe",
-        "matching_strategy": "Equals"
-      },
-      {
-        "kind": "Exe",
-        "id": "PowerToys.QuickAccess.exe",
-        "matching_strategy": "Equals"
-      },
-      {
-        "kind": "Exe",
-        "id": "Microsoft.CmdPal.UI.exe",
-        "matching_strategy": "Equals"
-      }
-    ]
-  },
-  "Prime95": {
-    "floating": [
-      {
-        "kind": "Exe",
-        "id": "prime95.exe",
-        "matching_strategy": "Equals"
-      }
-    ]
-  },
-  "Prism Launcher": {
-    "floating": [
-      [
-        {
-          "kind": "Exe",
-          "id": "prismlauncher.exe",
-          "matching_strategy": "Equals"
-        },
-        {
-          "kind": "Title",
-          "id": "- Prism Launcher",
-          "matching_strategy": "Contains"
-        }
-      ]
-    ]
-  },
+  "PowerToys": {},
+  "Prime95": {},
+  "Prism Launcher": {},
   "Process Hacker": {
-    "ignore": [
-      {
-        "kind": "Exe",
-        "id": "ProcessHacker.exe",
-        "matching_strategy": "Equals"
-      }
-    ],
     "tray_and_multi_window": [
       {
         "kind": "Exe",
@@ -2134,34 +1801,7 @@
       ]
     ]
   },
-  "QGIS": {
-    "floating": [
-      [
-        {
-          "kind": "Exe",
-          "id": "qgis-bin.exe",
-          "matching_strategy": "Equals"
-        },
-        {
-          "kind": "Title",
-          "id": "QGIS",
-          "matching_strategy": "DoesNotContain"
-        }
-      ],
-      [
-        {
-          "kind": "Exe",
-          "id": "qgis-ltr-bin.exe",
-          "matching_strategy": "Equals"
-        },
-        {
-          "kind": "Title",
-          "id": "QGIS",
-          "matching_strategy": "DoesNotContain"
-        }
-      ]
-    ]
-  },
+  "QGIS": {},
   "QQ": {
     "ignore": [
       {
@@ -2197,15 +1837,7 @@
       }
     ]
   },
-  "QuickLook": {
-    "ignore": [
-      {
-        "kind": "Exe",
-        "id": "QuickLook.exe",
-        "matching_strategy": "Equals"
-      }
-    ]
-  },
+  "QuickLook": {},
   "RepoZ": {
     "ignore": [
       {
@@ -2414,20 +2046,6 @@
           "matching_strategy": "DoesNotEqual"
         }
       ]
-    ],
-    "floating": [
-      [
-        {
-          "kind": "Exe",
-          "id": "steam.exe",
-          "matching_strategy": "Equals"
-        },
-        {
-          "kind": "Class",
-          "id": "BootstrapUpdateUIClass",
-          "matching_strategy": "Equals"
-        }
-      ]
     ]
   },
   "Steam Beta": {
@@ -2465,13 +2083,6 @@
     ]
   },
   "System Informer": {
-    "ignore": [
-      {
-        "kind": "Exe",
-        "id": "SystemInformer.exe",
-        "matching_strategy": "Equals"
-      }
-    ],
     "tray_and_multi_window": [
       {
         "kind": "Exe",
@@ -2514,15 +2125,7 @@
       }
     ]
   },
-  "Task Manager": {
-    "ignore": [
-      {
-        "kind": "Class",
-        "id": "TaskManagerWindow",
-        "matching_strategy": "Legacy"
-      }
-    ]
-  },
+  "Task Manager": {},
   "Telegram": {
     "tray_and_multi_window": [
       {
@@ -2532,15 +2135,7 @@
       }
     ]
   },
-  "TeraCopy": {
-    "ignore": [
-      {
-        "kind": "Exe",
-        "id": "TeraCopy.exe",
-        "matching_strategy": "Equals"
-      }
-    ]
-  },
+  "TeraCopy": {},
   "TickTick": {
     "tray_and_multi_window": [
       {
@@ -2643,15 +2238,7 @@
       }
     ]
   },
-  "Unity": {
-    "ignore": [
-      {
-        "kind": "Class",
-        "id": "UnityWndClass",
-        "matching_strategy": "Equals"
-      }
-    ]
-  },
+  "Unity": {},
   "Unity Editor": {
     "transparency_ignore": [
       {
@@ -2684,36 +2271,9 @@
         "id": "UnrealEditor.exe",
         "matching_strategy": "Equals"
       }
-    ],
-    "floating": [
-      [
-        {
-          "kind": "Exe",
-          "id": "UnrealEditor.exe",
-          "matching_strategy": "Equals"
-        },
-        {
-          "kind": "Title",
-          "id": "- Unreal Editor",
-          "matching_strategy": "DoesNotEndWith"
-        }
-      ]
     ]
   },
-  "Unreal Engine": {
-    "ignore": [
-      {
-        "kind": "Class",
-        "id": "UnrealWindow",
-        "matching_strategy": "Equals"
-      },
-      {
-        "kind": "Title",
-        "id": "SplashScreenGuard",
-        "matching_strategy": "Equals"
-      }
-    ]
-  },
+  "Unreal Engine": {},
   "visio": {
     "ignore": [
       {
@@ -2742,44 +2302,6 @@
         "id": "devenv.exe",
         "matching_strategy": "Equals"
       }
-    ],
-    "floating": [
-      [
-        {
-          "kind": "Exe",
-          "id": "devenv.exe",
-          "matching_strategy": "Equals"
-        },
-        {
-          "kind": "Title",
-          "id": "QuickWatch",
-          "matching_strategy": "Equals"
-        }
-      ],
-      [
-        {
-          "kind": "Exe",
-          "id": "devenv.exe",
-          "matching_strategy": "Equals"
-        },
-        {
-          "kind": "Title",
-          "id": " - Microsoft Visual Studio",
-          "matching_strategy": "DoesNotContain"
-        }
-      ],
-      [
-        {
-          "kind": "Exe",
-          "id": "DevHub.exe",
-          "matching_strategy": "Equals"
-        },
-        {
-          "kind": "Class",
-          "id": "ThreadedWaitDialog",
-          "matching_strategy": "Equals"
-        }
-      ]
     ],
     "ignore": [
       {
@@ -3114,11 +2636,6 @@
         "kind": "Class",
         "id": "OperationStatusWindow",
         "matching_strategy": "Legacy"
-      },
-      {
-        "kind": "Title",
-        "id": "Control Panel",
-        "matching_strategy": "Legacy"
       }
     ]
   },
@@ -3268,13 +2785,5 @@
       }
     ]
   },
-  "Zoom": {
-    "ignore": [
-      {
-        "kind": "Exe",
-        "id": "Zoom.exe",
-        "matching_strategy": "Equals"
-      }
-    ]
-  }
+  "Zoom": {}
 }

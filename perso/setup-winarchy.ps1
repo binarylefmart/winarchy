@@ -72,7 +72,7 @@ $Perso    = Join-Path $env:USERPROFILE '.winarchy-perso'
 $AhkDebut = '; >>> raccourcis-perso (setup-winarchy.ps1) >>>'
 $AhkFin   = '; <<< raccourcis-perso <<<'
 # Modèles suivis par git que ce script patche (et que Sync-Upstream.ps1 sait reprendre).
-$ModelesPatches = @('templates\komorebi.json.tpl', 'templates\yasb-config.yaml.tpl', 'templates\yasb-styles.css.tpl', 'games.toml')
+$ModelesPatches = @('templates\komorebi.json.tpl', 'templates\yasb-config.yaml.tpl', 'templates\yasb-styles.css.tpl', 'games.toml', 'vendor\asc\applications.json')
 
 # Corps de ~\.winarchy-perso\devant.ahk (voir Write-DevantScript).
 $script:CorpsDevant = @'
@@ -1125,9 +1125,34 @@ function Edit-ModeleKomorebi([string]$t) {
         $ecran = [regex]::Replace($ecran, '\{(\s*)$', "{`$1$offset`$1`"window_based_work_area_offset_limit`": 1,`$1")
     }
     $t = $t.Substring(0, $i) + $ecran + $t.Substring($w)
-    # ShareX tilé comme le reste : Winarchy l'ignore d'office (ignore_rules). Ses
-    # surcouches de capture sont sans barre de titre, komorebi ne les gère pas de toute façon.
-    [regex]::Replace($t, ',\s*\{\s*"kind":\s*"Exe",\s*"id":\s*"ShareX\.exe",\s*"matching_strategy":\s*"Equals"\s*\}(?=\{\{computed\.game_ignore_rules\}\}|\s*\])', '')
+    # Tilés comme le reste alors que Winarchy les ignore d'office (ignore_rules) : ShareX
+    # (ses surcouches de capture sont sans barre de titre, komorebi ne les gère pas de toute
+    # façon), le Gestionnaire des tâches et le Panneau de configuration.
+    foreach ($id in 'ShareX\.exe', 'TaskManagerWindow', 'Control Panel') {
+        $t = [regex]::Replace($t, "(,\s*)?\{\s*`"kind`":\s*`"\w+`",\s*`"id`":\s*`"$id`",\s*`"matching_strategy`":\s*`"Equals`"\s*\}(?(1)|,?)", '')
+    }
+    $t
+}
+
+# Règles de la communauté (ASC) : l'utilisateur veut tout tiler. On retire les « ignore »
+# des applis choisies et TOUS les « floating », en gardant leurs autres attributs
+# (tray_and_multi_window, layered…). [[disable]] dans rules.toml ferait perdre ces attributs
+# et rules.toml ne sait pas viser les règles composées (ex. Steam exe + classe).
+$script:AscSansIgnore = @('Zoom', 'Microsoft Teams classic', 'Calculator', '1Password', 'Dropbox', 'Google Drive',
+    'paint.net', 'TeraCopy', 'QuickLook', 'Affinity Photo 2', 'Process Hacker', 'System Informer', 'PowerToys',
+    'Logi Bolt', 'Logitech Options', 'LogiTune', 'Unity', 'Unreal Engine', 'Task Manager')
+function Edit-AscPerso([string]$t) {
+    $asc = $t | ConvertFrom-Json -AsHashtable
+    if (-not $asc.Contains('Zoom')) { throw 'format ASC inattendu' }
+    foreach ($app in @($asc.Keys)) {
+        if ($app.StartsWith('$')) { continue }
+        $cats = @('floating') + @(if ($app -in $script:AscSansIgnore) { 'ignore' })
+        foreach ($c in $cats) { if ($asc[$app].Contains($c)) { $asc[$app].Remove($c) } }
+    }
+    # Explorateur : on garde ses autres ignore (progression de copie…), pas celui du Panneau de configuration.
+    $ex = $asc['Windows Explorer']
+    if ($ex -and $ex.Contains('ignore')) { $ex['ignore'] = @($ex['ignore'] | Where-Object { $_.id -ne 'Control Panel' }) }
+    ($asc | ConvertTo-Json -Depth 20) + "`n"
 }
 
 # Barre YASB : groupes toujours dépliés, et pas de compteur Codex.
@@ -1314,7 +1339,7 @@ function Edit-JeuxLanceurs([string]$t) {
 function Set-ReglagesWinarchy([string]$Root) {
     Write-Host '==> Réglages perso dans les modèles de Winarchy'
     $change = $false
-    $patchs = @{ 'templates\komorebi.json.tpl' = ${function:Edit-ModeleKomorebi}; 'templates\yasb-config.yaml.tpl' = ${function:Edit-ModeleYasb}; 'templates\yasb-styles.css.tpl' = ${function:Edit-ModeleYasbStyles}; 'games.toml' = ${function:Edit-JeuxLanceurs} }
+    $patchs = @{ 'templates\komorebi.json.tpl' = ${function:Edit-ModeleKomorebi}; 'templates\yasb-config.yaml.tpl' = ${function:Edit-ModeleYasb}; 'templates\yasb-styles.css.tpl' = ${function:Edit-ModeleYasbStyles}; 'games.toml' = ${function:Edit-JeuxLanceurs}; 'vendor\asc\applications.json' = ${function:Edit-AscPerso} }
     foreach ($rel in $ModelesPatches) {
         $p = Join-Path $Root $rel
         if (-not (Test-Path $p)) { Warn "$rel introuvable : réglage ignoré"; continue }

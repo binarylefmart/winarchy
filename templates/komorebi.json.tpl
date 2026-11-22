@@ -106,12 +106,10 @@
   "slow_application_compensation_time": 75,
   "ignore_rules": [
     { "kind": "Class", "id": "#32770", "matching_strategy": "Equals" },
-    { "kind": "Title", "id": "Control Panel", "matching_strategy": "Equals" },
     { "kind": "Exe", "id": "msiexec.exe", "matching_strategy": "Equals" },
     { "kind": "Exe", "id": "PowerToys.PowerLauncher.exe", "matching_strategy": "Equals" },
     { "kind": "Exe", "id": "Flow.Launcher.exe", "matching_strategy": "Equals" },
     { "kind": "Exe", "id": "Twinkle Tray.exe", "matching_strategy": "Equals" },
-    { "kind": "Class", "id": "TaskManagerWindow", "matching_strategy": "Equals" },
     { "kind": "Title", "id": "Picture-in-Picture", "matching_strategy": "Equals" },
     { "kind": "Title", "id": "Winarchy — Themes", "matching_strategy": "Equals" },
     { "kind": "Class", "id": "ReunionWindowingCaptionControls", "matching_strategy": "Equals" },

@@ -1096,25 +1096,28 @@ function Set-ReglagesWinarchy([string]$Root) {
     # IME / MSCTFIME UI de Claude et la moitié droite du bureau se redimensionnait. On gère
     # la fenêtre par son titre et on ignore ces fantômes. Une règle manage l'emporte sur
     # ignore : on la retire.
-    $mauvaise = '(?m)^\[\[manage\]\]\s*\r?\n\s*exe\s*=\s*"claude\.exe"\s*(\r?\n)?'
+    # Même piège avec OrcaSlicer (ses panneaux internes « control », « Quality »… tuilés).
+    $mauvaise = '(?m)^\[\[manage\]\]\s*\r?\n\s*exe\s*=\s*"(claude|orca-slicer)\.exe"\s*(\r?\n)?'
     if ($actuel -match $mauvaise) {
         $actuel = [regex]::Replace($actuel, $mauvaise, '')
         [IO.File]::WriteAllText($rules, $actuel, (New-Object Text.UTF8Encoding $false))
-        Warn 'Règle komorebi « manage claude.exe » retirée : redémarre komorebi pour l''oublier (reload ne retire pas les règles)'
+        Warn 'Règle komorebi « manage <exe> » retirée : redémarre komorebi pour l''oublier (reload ne retire pas les règles)'
     }
     $voulues = @(
         @('manage', 'title', 'Claude'),
         @('tray_and_multi_window', 'exe', 'claude.exe'),
         @('layered', 'exe', 'claude.exe'),
         # OrcaSlicer (wxWidgets) dessine sa propre barre de titre (pas de WS_CAPTION) : ignoré sans ça.
-        @('manage', 'exe', 'orca-slicer.exe'),
+        # Par le titre des fenêtres principales (« … - OrcaSlicer ») : par exe, ses panneaux internes étaient tuilés.
+        @('manage', 'title', 'OrcaSlicer', 'EndsWith'),
         @('ignore', 'class', 'MSCTFIME UI'),
         @('ignore', 'class', 'IME')
     )
     foreach ($r in $voulues) {
-        $cat, $cle, $val = $r
+        $cat, $cle, $val, $strategie = $r
         if ($actuel -match "(?m)^\[\[$cat\]\]\s*\r?\n\s*$cle\s*=\s*`"$([regex]::Escape($val))`"") { continue }
-        if (Invoke-WinarchyCli $Root @('rules', 'add', $cat, $cle, $val)) { Ok "Règle komorebi : $cat $cle $val" }
+        $argsCli = @('rules', 'add', $cat, $cle, $val) + @($strategie | Where-Object { $_ })
+        if (Invoke-WinarchyCli $Root $argsCli) { Ok "Règle komorebi : $cat $cle $val" }
         else { Warn "Règle komorebi $cat $cle $val non ajoutée" }
     }
     if ($change) { Update-ThemeActif $Root }

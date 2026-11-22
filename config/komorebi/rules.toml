@@ -69,5 +69,7 @@ class = "MSCTFIME UI"
 class = "IME"
 
 
+
 [[manage]]
-exe = "orca-slicer.exe"
+title = "OrcaSlicer"
+matching_strategy = "EndsWith"

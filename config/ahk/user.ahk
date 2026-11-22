@@ -491,4 +491,34 @@ PersoSurveilleSurvol() {
     DllCall('SystemParametersInfo', 'UInt', 0x100D, 'UInt', 0, 'Ptr', 1, 'UInt', 3)    ; premier plan au survol
     DllCall('SystemParametersInfo', 'UInt', 0x2003, 'UInt', 0, 'Ptr', 150, 'UInt', 3)  ; après 150 ms
 }
+
+; --- Fenêtres « Propriétés » de l'Explorateur centrées ---------------------------
+; komorebi refuse de les tuiler (fenêtre attachée à l'Explorateur, taille fixe) : à leur
+; ouverture, on les centre une seule fois sur leur écran (déplaçables ensuite).
+SetTimer(PersoCentreProprietes, 250)
+PersoCentreProprietes() {
+    static vues := Map()
+    for hwnd in WinGetList('ahk_class #32770 ahk_exe explorer.exe') {
+        if vues.Has(hwnd)
+            continue
+        try {
+            if !InStr(WinGetTitle(hwnd), 'Propriétés') && !InStr(WinGetTitle(hwnd), 'Properties')
+                continue
+            vues[hwnd] := 1
+            WinGetPos(&x, &y, &l, &h, hwnd)
+            ; écran qui contient le centre de la fenêtre (sinon l'écran principal)
+            ecran := MonitorGetPrimary()
+            Loop MonitorGetCount() {
+                MonitorGet(A_Index, &g, &t, &d, &b)
+                if (x + l // 2 >= g && x + l // 2 < d && y + h // 2 >= t && y + h // 2 < b)
+                    ecran := A_Index
+            }
+            MonitorGetWorkArea(ecran, &g, &t, &d, &b)
+            WinMove(g + (d - g - l) // 2, t + (b - t - h) // 2, , , hwnd)
+        }
+    }
+    for hwnd in [vues*]                              ; oublie les fenêtres fermées
+        if !WinExist(hwnd)
+            vues.Delete(hwnd)
+}
 ; <<< raccourcis-perso <<<

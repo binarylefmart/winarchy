@@ -1106,6 +1106,8 @@ function Set-ReglagesWinarchy([string]$Root) {
         @('manage', 'title', 'Claude'),
         @('tray_and_multi_window', 'exe', 'claude.exe'),
         @('layered', 'exe', 'claude.exe'),
+        # OrcaSlicer (wxWidgets) dessine sa propre barre de titre (pas de WS_CAPTION) : ignoré sans ça.
+        @('manage', 'exe', 'orca-slicer.exe'),
         @('ignore', 'class', 'MSCTFIME UI'),
         @('ignore', 'class', 'IME')
     )

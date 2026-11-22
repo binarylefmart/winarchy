@@ -68,3 +68,6 @@ class = "MSCTFIME UI"
 [[ignore]]
 class = "IME"
 
+
+[[manage]]
+exe = "orca-slicer.exe"

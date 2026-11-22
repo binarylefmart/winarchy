@@ -1130,12 +1130,12 @@ function Edit-ModeleYasbStyles([string]$t) {
 
 # Lanceurs de jeux (Steam, Epic, GOG…) : Winarchy les met dans games.toml, donc komorebi
 # les ignore ET les raccourcis Super sont suspendus quand ils ont le focus. On veut les
-# tiler comme n'importe quelle appli : on retire leurs entrées [[launchers]]. RustDesk
-# reste (session distante : les touches Super doivent passer à la machine distante).
+# tiler comme n'importe quelle appli : on retire leurs entrées [[launchers]], RustDesk compris
+# (choix de l'utilisateur : Super n'est donc plus transmis à la machine distante).
 # Les règles ASC restent actives (ex. Steam : seule la fenêtre « Steam » est tuilée,
 # pas les popups amis / notifications de steamwebhelper).
 function Edit-JeuxLanceurs([string]$t) {
-    [regex]::Replace($t, '(?m)^\[\[launchers\]\]\s*\r?\nexe\s*=\s*"(?!rustdesk)[^"]+"[^\r\n]*(\r?\n)+', '')
+    [regex]::Replace($t, '(?m)^\[\[launchers\]\]\s*\r?\nexe\s*=\s*"[^"]+"[^\r\n]*(\r?\n)+', '')
 }
 
 function Set-ReglagesWinarchy([string]$Root) {

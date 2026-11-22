@@ -10,9 +10,6 @@
 # nombres genéricos (javaw.exe, hl2.exe, ShooterGame.exe) que matchearían apps no-juego.
 
 # --- Lanzadores y ventanas no-juego que tampoco deben tilearse ----------------
-[[launchers]]
-exe = "rustdesk.exe"                  # escritorio remoto: la sesión no debe tilearse
-
 # --- Utilidades / ventanitas que conviene flotar -----------------------------
 [[games]]
 exe = "faceitclient.exe"             # ventanita mini del cliente FACEIT

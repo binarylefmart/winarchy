@@ -1483,6 +1483,11 @@ function Edit-ModeleYasbStyles([string]$t) {
     min-width: 340px;
     min-height: 380px;
 }
+.bluetooth-menu .header,
+.bluetooth-menu .section,
+.bluetooth-menu .footer { margin: 0 12px; }
+.bluetooth-menu .header { margin-top: 10px; }
+.bluetooth-menu .footer { margin-bottom: 10px; }
 .bluetooth-menu .section-title {
     font-weight: 600;
     padding: 8px 4px 6px 4px;

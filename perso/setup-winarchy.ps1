@@ -1822,6 +1822,10 @@ function Set-ReglagesWinarchy([string]$Root) {
         # OrcaSlicer (wxWidgets) dessine sa propre barre de titre (pas de WS_CAPTION) : ignoré sans ça.
         # Par le titre des fenêtres principales (« … - OrcaSlicer ») : par exe, ses panneaux internes étaient tuilés.
         @('manage', 'title', 'OrcaSlicer', 'EndsWith'),
+        # Lanceur DCS World (classe « ED Launcher Window ») : popup sans WS_CAPTION, ignoré sans ça.
+        @('manage', 'title', 'DCS Launcher', 'Equals'),
+        # Fenêtre principale ESET (classe « ESET Main Frame ») : popup sans WS_CAPTION, topmost, ignorée sans ça.
+        @('manage', 'class', 'ESET Main Frame'),
         @('ignore', 'class', 'MSCTFIME UI'),
         @('ignore', 'class', 'IME')
     )

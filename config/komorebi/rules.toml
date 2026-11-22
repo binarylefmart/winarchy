@@ -73,3 +73,10 @@ class = "IME"
 [[manage]]
 title = "OrcaSlicer"
 matching_strategy = "EndsWith"
+
+[[manage]]
+title = "DCS Launcher"
+matching_strategy = "Equals"
+
+[[manage]]
+class = "ESET Main Frame"

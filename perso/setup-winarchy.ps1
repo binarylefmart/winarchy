@@ -1341,6 +1341,24 @@ PersoSurveilleSurvol() {
     DllCall('SystemParametersInfo', 'UInt', 0x2003, 'UInt', 0, 'Ptr', 150, 'UInt', 3)  ; après 150 ms
 }
 
+; --- Contrôle à distance : garder les raccourcis Super --------------------------
+; NinjaRemote (ncplayer.exe) pose son propre crochet clavier quand il prend le focus :
+; installé après celui d'AHK, il passe en premier et avale les touches (Super+Shift+2
+; n'arrivait jamais). Dès qu'une de ces fenêtres devient active, on réinstalle le
+; crochet d'AHK pour repasser devant (Windows appelle le dernier installé en premier).
+SetTimer(PersoCrochetDevant, 200)
+PersoCrochetDevant() {
+    static dernier := 0
+    try hwnd := WinActive('ahk_exe ncplayer.exe')
+    catch
+        hwnd := 0
+    if (hwnd && hwnd != dernier) {
+        InstallKeybdHook(true, true)
+        SetTimer(() => InstallKeybdHook(true, true), -700)   ; au cas où il le repose en retard
+    }
+    dernier := hwnd
+}
+
 ; --- Boîtes de dialogue et installeurs toujours devant --------------------------
 ; Dans un script à part (~\.winarchy-perso\devant.ahk, écrit par setup-winarchy.ps1),
 ; lancé avec AutoHotkey64_UIA.exe (UI Access) : sans ça Windows interdit de mettre

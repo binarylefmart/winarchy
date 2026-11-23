@@ -297,8 +297,16 @@ PersoCentre(hwnd) {
 ; --- Barre des tâches Windows jamais visible ------------------------------------
 ; YASB la remplace. En masquage automatique, elle ressortait dès que la souris touchait
 ; le bas de l'écran : on la recache aussitôt (le menu Démarrer s'ouvre toujours).
+; Super+Espace (menu Démarrer) l'affiche entière : elle reste visible tant que Démarrer, la
+; recherche ou la barre elle-même ont le focus.
 SetTimer(PersoCacheBarreWindows, 250)
 PersoCacheBarreWindows() {
+    try {
+        exe := WinGetProcessName('A'), cl := WinGetClass('A')
+        if (exe ~= 'i)^(StartMenuExperienceHost|SearchHost|ShellExperienceHost|ShellHost)\.exe$'
+            || cl ~= '^(Shell_TrayWnd|Shell_SecondaryTrayWnd|TopLevelWindowForOverflowXamlIsland|NotifyIconOverflowWindow|XamlExplorerHostIslandWindow)$')
+            return
+    }
     for classe in ['Shell_TrayWnd', 'Shell_SecondaryTrayWnd']
         for h in WinGetList('ahk_class ' classe)      ; seulement les visibles
             try WinHide(h)
@@ -864,7 +872,7 @@ InstallMouseHook()
 #+n::Run('notepad.exe')                           ; Bloc-notes
 #r::Run('explorer.exe shell:::{2559a1f3-21d7-11d4-bdaf-00c04f60b9f0}')   ; Exécuter
 #i::Run('ms-settings:')                           ; Paramètres Windows
-#Space::Send('^{Esc}')                            ; Menu Démarrer
+#Space::PersoDemarrer()                           ; Menu Démarrer + barre des tâches Windows entière
 #q::ShowMainMenu()                                ; Menu Winarchy
 ; Super seul = lanceur d'applis (Flow, l'ancien Super+Espace) au lieu du menu Démarrer.
 ; « Seul » = aucune autre touche ni clic pendant l'appui, relâché en moins d'une
@@ -932,6 +940,18 @@ PersoSuper(bas) {
     depuis := 0
     if seul
         ToggleFlow()
+}
+
+; La barre des tâches est cachée par devant.ahk : on la réaffiche, puis Démarrer. Elle reste
+; visible tant que Démarrer ou la barre ont le focus (devant.ahk).
+PersoDemarrer() {
+    dhw := A_DetectHiddenWindows
+    DetectHiddenWindows(true)
+    for classe in ['Shell_TrayWnd', 'Shell_SecondaryTrayWnd']
+        for h in WinGetList('ahk_class ' classe)
+            try WinShow(h)
+    DetectHiddenWindows(dhw)
+    Send('^{Esc}')
 }
 
 PersoKomorebic(cmd) {

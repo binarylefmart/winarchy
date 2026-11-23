@@ -1595,19 +1595,10 @@ function Edit-ModeleKomorebi([string]$t) {
         $ecran = [regex]::Replace($ecran, '\{(\s*)$', "{`$1$offset`$1`"window_based_work_area_offset_limit`": 1,`$1")
     }
     $t = $t.Substring(0, $i) + $ecran + $t.Substring($w)
-    # Barre YASB « toujours au-dessus » (Edit-ModeleYasb) : elle ne réserve plus sa place
-    # (AppBar) et les tuiles passaient dessous. komorebi réserve donc le haut : hauteur de
-    # la barre (config YASB, pixels logiques) x échelle de Windows, en pixels réels.
-    $hauteur = 34
-    $cfgYasb = Join-Path $PSScriptRoot '..\config\yasb\config.yaml'
-    if ((Test-Path $cfgYasb) -and ([IO.File]::ReadAllText($cfgYasb) -match '(?m)^\s+height:\s*(\d+)')) { $hauteur = [int]$Matches[1] }
-    $dpi = (Get-ItemProperty 'HKCU:\Control Panel\Desktop\WindowMetrics' -Name AppliedDPI -ErrorAction SilentlyContinue).AppliedDPI
-    if (-not $dpi) { $dpi = 96 }
-    $haut = [int][math]::Ceiling($hauteur * $dpi / 96)
-    # Pour komorebi, « bottom » se soustrait de la hauteur : décaler le haut sans retirer la
-    # même hauteur faisait déborder les tuiles sous l'écran. 2 = marge d'origine (barre des
-    # tâches masquée).
-    $t = [regex]::Replace($t, '("global_work_area_offset":\s*\{\s*"left":\s*\d+,\s*"top":\s*)\d+(,\s*"right":\s*\d+,\s*"bottom":\s*)\d+', "`${1}$haut`${2}$($haut + 2)")
+    # Le haut de l'écran est réservé par l'AppBar de YASB (Edit-ModeleYasb), qui décale aussi
+    # les icônes du bureau : komorebi n'ajoute aucun décalage (sinon double marge). Valeurs
+    # d'origine de Winarchy (top 0, bottom 2 pour la barre des tâches masquée).
+    $t = [regex]::Replace($t, '("global_work_area_offset":\s*\{\s*"left":\s*\d+,\s*"top":\s*)\d+(,\s*"right":\s*\d+,\s*"bottom":\s*)\d+', '${1}0${2}2')
     # Portable + 3 écrans externes : le modèle ne décrit que 2 écrans, on complète jusqu'à 4
     # (10 bureaux chacun, comme le 2e). Un écran absent ne gêne pas komorebi.
     $i = $t.IndexOf('"monitors": [')
@@ -1896,7 +1887,9 @@ function Edit-ModeleYasb([string]$t) {
     # Un seul mécanisme réserve le haut de l'écran : komorebi (global_work_area_offset, voir
     # Edit-ModeleKomorebi). L'AppBar de YASB se réenregistrait par moments et s'ajoutait au
     # décalage de komorebi (fenêtres à ~90 px du haut au lieu de 48).
-    $t = $t.Replace('windows_app_bar: true', 'windows_app_bar: false')
+    # Revu : c'est l'AppBar de YASB qui réserve le haut (Windows décale aussi les icônes du
+    # bureau, que le décalage komorebi seul laissait sous la barre) ; komorebi n'ajoute rien.
+    $t = $t.Replace('windows_app_bar: false', 'windows_app_bar: true')
     # Chemins absolus au lieu de %KOMOREBI_CONFIG_HOME% : la tâche YASB ne définit pas cette
     # variable, et le Planificateur ne voit les variables utilisateur qu'après un redémarrage.
     # Sans elle, logo Windows et menu ☰ (show-menu.flag) et indicateurs ne marchaient pas.
@@ -1927,7 +1920,7 @@ function Edit-ModeleYasb([string]$t) {
       enabled: false
     window_flags:
       always_on_top: true
-      windows_app_bar: false
+      windows_app_bar: true
     dimensions:
       width: "100%"
       height: {{bar.height}}

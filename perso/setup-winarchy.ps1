@@ -586,11 +586,15 @@ $json
 function Write-ReseauScript {
     $ps1 = Join-Path $Perso 'reseau.ps1'
     New-Item -ItemType Directory -Force $Perso | Out-Null
-    Write-Utf8Bom $ps1 @'
+    $racine = Find-WinarchyKomorebi
+    $cfgKomorebi = if ($racine) { Join-Path $racine 'config\komorebi' } else { 'C:\winarchy\config\komorebi' }
+    Write-Utf8Bom $ps1 (@'
 # Lancé par le widget « wifi » de la barre YASB (setup-winarchy.ps1), en arrière-plan.
 # Sortie JSON : icone (barre, écrite par le watcher Start-NetIcon.ps1 de Winarchy), detail (bulle).
 [Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)
-$flag = Join-Path $env:KOMOREBI_CONFIG_HOME '..\..\state\net-icon.flag'
+# Repli si YASB a été lancé sans KOMOREBI_CONFIG_HOME (sinon Join-Path plante et la barre affiche « None »).
+$cfg = if ($env:KOMOREBI_CONFIG_HOME) { $env:KOMOREBI_CONFIG_HOME } else { '__KOMOREBI_CONFIG__' }
+$flag = Join-Path $cfg '..\..\state\net-icon.flag'
 $icone = if (Test-Path $flag) { ([IO.File]::ReadAllText($flag, [Text.Encoding]::UTF8)).Trim() } else { [char]::ConvertFromUtf32(0xF092E) }
 function Debit([double]$o) { $b = $o * 8; if ($b -ge 1e6) { '{0:0.0} Mb/s' -f ($b / 1e6) } else { '{0:0} kb/s' -f ($b / 1e3) } }
 function Vitesse([double]$b) { if ($b -ge 1e9) { '{0:0.#} Gb/s' -f ($b / 1e9) } else { '{0:0} Mb/s' -f ($b / 1e6) } }
@@ -637,7 +641,7 @@ if ($route) {
 $vpn = @($configs | Where-Object { $_.Description -match 'WireGuard|OpenVPN|TAP-|Wintun|VPN|Tailscale|ZeroTier' } | ForEach-Object { "$($_.Description) ($((@($_.IPAddress | Where-Object { $_ -match '^\d+\.' })) -join ', '))" })
 if ($vpn) { $detail += "VPN : $($vpn -join ' ; ')" }
 [pscustomobject]@{ icone = $icone; detail = $detail -join "`n" } | ConvertTo-Json -Compress
-'@
+'@).Replace('__KOMOREBI_CONFIG__', $cfgKomorebi)
     Ok "Script réseau (barre YASB) : $ps1"
 }
 

@@ -1483,6 +1483,16 @@ function Edit-ModeleKomorebi([string]$t) {
         $ecran = [regex]::Replace($ecran, '\{(\s*)$', "{`$1$offset`$1`"window_based_work_area_offset_limit`": 1,`$1")
     }
     $t = $t.Substring(0, $i) + $ecran + $t.Substring($w)
+    # Barre YASB « toujours au-dessus » (Edit-ModeleYasb) : elle ne réserve plus sa place
+    # (AppBar) et les tuiles passaient dessous. komorebi réserve donc le haut : hauteur de
+    # la barre (config YASB, pixels logiques) x échelle de Windows, en pixels réels.
+    $hauteur = 34
+    $cfgYasb = Join-Path $PSScriptRoot '..\config\yasb\config.yaml'
+    if ((Test-Path $cfgYasb) -and ([IO.File]::ReadAllText($cfgYasb) -match '(?m)^\s+height:\s*(\d+)')) { $hauteur = [int]$Matches[1] }
+    $dpi = (Get-ItemProperty 'HKCU:\Control Panel\Desktop\WindowMetrics' -Name AppliedDPI -ErrorAction SilentlyContinue).AppliedDPI
+    if (-not $dpi) { $dpi = 96 }
+    $haut = [int][math]::Ceiling($hauteur * $dpi / 96)
+    $t = [regex]::Replace($t, '("global_work_area_offset":\s*\{\s*"left":\s*\d+,\s*"top":\s*)\d+', "`${1}$haut")
     # Portable + 3 écrans externes : le modèle ne décrit que 2 écrans, on complète jusqu'à 4
     # (10 bureaux chacun, comme le 2e). Un écran absent ne gêne pas komorebi.
     $i = $t.IndexOf('"monitors": [')

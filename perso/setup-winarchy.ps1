@@ -1767,6 +1767,10 @@ function Edit-ModeleYasb([string]$t) {
     # Barre toujours visible : au-dessus des fenêtres, y compris celles que devant.ahk met
     # « toujours au-dessus » (devant.ahk la remonte ensuite par-dessus elles).
     $t = [regex]::Replace($t, '(window_flags:\s*\r?\n\s*always_on_top:\s*)false', '${1}true')
+    # Un seul mécanisme réserve le haut de l'écran : komorebi (global_work_area_offset, voir
+    # Edit-ModeleKomorebi). L'AppBar de YASB se réenregistrait par moments et s'ajoutait au
+    # décalage de komorebi (fenêtres à ~90 px du haut au lieu de 48).
+    $t = $t.Replace('windows_app_bar: true', 'windows_app_bar: false')
     # Zone de notification : toutes les icônes, pas seulement celles épinglées (Alt+clic).
     $t = $t.Replace('show_unpinned: false', 'show_unpinned: true')
     # Écran du laptop (1536 px de large à 125 %) : trop étroit pour tous les widgets de
@@ -1788,7 +1792,7 @@ function Edit-ModeleYasb([string]$t) {
       enabled: false
     window_flags:
       always_on_top: true
-      windows_app_bar: true
+      windows_app_bar: false
     dimensions:
       width: "100%"
       height: {{bar.height}}

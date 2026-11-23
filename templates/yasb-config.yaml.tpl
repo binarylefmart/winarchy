@@ -103,7 +103,7 @@ widgets:
       label: ""   # logo Windows (nerd font)
       class_name: "home-widget"
       callbacks:
-        on_left: "exec cmd.exe /c copy /y nul C:\\winarchy\\state\\show-menu.flag"
+        on_left: "exec cmd.exe /c %USERPROFILE%\\.winarchy-perso\\lanceur.ahk"
         # sin esto, el right/middle-click por defecto hace toggle_label → label_alt
         # (no definido) y el logo desaparece hasta volver a togglear.
         on_middle: "do_nothing"

@@ -25,7 +25,7 @@ InstallMouseHook()
 #+n::Run('notepad.exe')                           ; Bloc-notes
 #r::Run('explorer.exe shell:::{2559a1f3-21d7-11d4-bdaf-00c04f60b9f0}')   ; Exécuter
 #i::Run('ms-settings:')                           ; Paramètres Windows
-#Space::Send('^{Esc}')                            ; Menu Démarrer
+#Space::PersoDemarrer()                           ; Menu Démarrer + barre des tâches Windows entière
 #q::ShowMainMenu()                                ; Menu Winarchy
 ; Super seul = lanceur d'applis (Flow, l'ancien Super+Espace) au lieu du menu Démarrer.
 ; « Seul » = aucune autre touche ni clic pendant l'appui, relâché en moins d'une
@@ -93,6 +93,18 @@ PersoSuper(bas) {
     depuis := 0
     if seul
         ToggleFlow()
+}
+
+; La barre des tâches est cachée par devant.ahk : on la réaffiche, puis Démarrer. Elle reste
+; visible tant que Démarrer ou la barre ont le focus (devant.ahk).
+PersoDemarrer() {
+    dhw := A_DetectHiddenWindows
+    DetectHiddenWindows(true)
+    for classe in ['Shell_TrayWnd', 'Shell_SecondaryTrayWnd']
+        for h in WinGetList('ahk_class ' classe)
+            try WinShow(h)
+    DetectHiddenWindows(dhw)
+    Send('^{Esc}')
 }
 
 PersoKomorebic(cmd) {

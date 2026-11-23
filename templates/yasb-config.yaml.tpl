@@ -31,7 +31,7 @@ bars:
     blur_effect:
       enabled: false
     window_flags:
-      always_on_top: false
+      always_on_top: true
       windows_app_bar: true
     dimensions:
       width: "100%"
@@ -57,6 +57,41 @@ bars:
         alignment: "right"
         stretch: true
 
+  # Écran du laptop (perso, setup-winarchy.ps1) : barre compacte, la barre complète y était coupée.
+  laptop-bar:
+    enabled: true
+    screens: ["\\\\.\\DISPLAY1"]
+    class_name: "yasb-bar"
+    alignment:
+      position: "{{computed.bar_position}}"
+      align: "center"
+    blur_effect:
+      enabled: false
+    window_flags:
+      always_on_top: true
+      windows_app_bar: true
+    dimensions:
+      width: "100%"
+      height: {{bar.height}}
+    padding:
+      top: 0
+      left: 0
+      bottom: 0
+      right: 0
+    widgets:
+      left: ["home", "komorebi_workspaces", "taskbar"]
+      center: ["clock"]
+      right: ["connections", "volume", "battery", "notifications", "systray", "winarchy_menu"]
+    layouts:
+      left:
+        alignment: "left"
+        stretch: true
+      center:
+        alignment: "center"
+        stretch: false
+      right:
+        alignment: "right"
+        stretch: true
 widgets:
   # Logo arriba-izquierda: abre el mismo menú principal de winarchy.ahk
   # (Apps/Themes/System/...) que SUPER+Alt+Space y el botón ☰ de la derecha.
@@ -655,7 +690,7 @@ widgets:
       label_collapsed: "▸"
       label_expanded: "▾"
       pin_click_modifier: "alt"
-      show_unpinned: false
+      show_unpinned: true
       # Tray propio de ShareX, oculto en la barra.
       hide_icons: ["ShareX"]
 

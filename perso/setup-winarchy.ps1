@@ -479,6 +479,25 @@ Send '#v'
     Ok "Lanceur presse-papiers (Win+V) : $ahk"
 }
 
+# Logo Windows de la barre YASB -> lanceur d'applis Flow (comme Super seul) : raccourci natif
+# de Flow (Alt+Espace), ou démarrage de Flow s'il ne tourne pas encore.
+function Write-LanceurAppsLauncher {
+    $ahk = Join-Path $Perso 'lanceur.ahk'
+    New-Item -ItemType Directory -Force $Perso | Out-Null
+    Write-Utf8Bom $ahk @'
+#Requires AutoHotkey v2.0
+#SingleInstance Force
+; Lancé par le logo Windows de la barre YASB (setup-winarchy.ps1).
+flow := EnvGet('LOCALAPPDATA') '\FlowLauncher\Flow.Launcher.exe'
+Sleep 150        ; laisse le clic sur la barre se terminer
+if ProcessExist('Flow.Launcher.exe')
+    Send '!{Space}'
+else if FileExist(flow)
+    Run '"' flow '"'
+'@
+    Ok "Lanceur d'applis (logo Windows de la barre) : $ahk"
+}
+
 # Widget « disques » de la barre YASB : % des disques locaux, détail réseau en bulle.
 # Boîtes de dialogue et installeurs toujours devant : script séparé lancé en UI Access
 # (AutoHotkey64_UIA.exe) par user.ahk, seul moyen de toucher aux fenêtres admin.
@@ -854,6 +873,7 @@ function Install-Raccourcis([string]$Root) {
     Write-ClaudeLauncher
     Write-ScreenpressoLauncher
     Write-PressePapiersLauncher
+    Write-LanceurAppsLauncher
     Write-DisquesScript
     Write-PerfScript
     Write-ReseauScript
@@ -1882,6 +1902,8 @@ function Edit-ModeleYasb([string]$t) {
     # Sans elle, logo Windows et menu ☰ (show-menu.flag) et indicateurs ne marchaient pas.
     $etat = Join-Path (Resolve-Path (Join-Path $PSScriptRoot '..')).Path 'state'
     $t = $t.Replace('%KOMOREBI_CONFIG_HOME%\\..\\..\\state', $etat.Replace('\', '\\')).Replace('%KOMOREBI_CONFIG_HOME%\..\..\state', $etat)
+    # Logo Windows (widget home) -> lanceur d'applis Flow ; le ☰ de droite garde le menu Winarchy.
+    $t = [regex]::Replace($t, '(?s)(\n  home:\r?\n.*?on_left: )"[^"\r\n]*"', '${1}"exec cmd.exe /c %USERPROFILE%\\.winarchy-perso\\lanceur.ahk"', 1)
     # Batterie : pourcentage toujours affiché (clic = icône seule).
     $t = [regex]::Replace($t, '(BatteryWidget"\s*\r?\n\s*options:\s*\r?\n\s*label: )"<span>\{icon\}</span>"(\s*\r?\n\s*label_alt: )"<span>\{icon\}</span> \{percent\}%"', '${1}"<span>{icon}</span> {percent}%"${2}"<span>{icon}</span>"')
     # Zone de notification : toutes les icônes, pas seulement celles épinglées (Alt+clic).

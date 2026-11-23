@@ -103,8 +103,20 @@ PersoDemarrer() {
     for classe in ['Shell_TrayWnd', 'Shell_SecondaryTrayWnd']
         for h in WinGetList('ahk_class ' classe)
             try WinShow(h)
+    ; Masquage automatique coupé, sinon la barre reste glissée hors de l'écran ;
+    ; devant.ahk le remet quand Démarrer et la barre perdent le focus.
+    PersoMasquageAuto(false)
     DetectHiddenWindows(dhw)
     Send('^{Esc}')
+}
+; ABM_SETSTATE : ABS_AUTOHIDE (1) ou ABS_ALWAYSONTOP (2) pour toutes les barres des tâches.
+PersoMasquageAuto(actif) {
+    x64 := A_PtrSize = 8
+    abd := Buffer(x64 ? 48 : 36, 0)
+    NumPut('UInt', abd.Size, abd, 0)
+    NumPut('Ptr', WinExist('ahk_class Shell_TrayWnd'), abd, x64 ? 8 : 4)
+    NumPut('Ptr', actif ? 1 : 2, abd, x64 ? 40 : 32)
+    DllCall('Shell32\SHAppBarMessage', 'UInt', 10, 'Ptr', abd)
 }
 
 PersoKomorebic(cmd) {

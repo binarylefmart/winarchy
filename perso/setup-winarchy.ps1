@@ -294,6 +294,16 @@ PersoCentre(hwnd) {
     WinMove(g + (d - g - l) // 2, t + (b - t - h) // 2, , , hwnd)
 }
 
+; --- Barre des tâches Windows jamais visible ------------------------------------
+; YASB la remplace. En masquage automatique, elle ressortait dès que la souris touchait
+; le bas de l'écran : on la recache aussitôt (le menu Démarrer s'ouvre toujours).
+SetTimer(PersoCacheBarreWindows, 250)
+PersoCacheBarreWindows() {
+    for classe in ['Shell_TrayWnd', 'Shell_SecondaryTrayWnd']
+        for h in WinGetList('ahk_class ' classe)      ; seulement les visibles
+            try WinHide(h)
+}
+
 ; --- Demandes UAC en attente ----------------------------------------------------
 ; Une demande d'élévation lancée depuis l'arrière-plan n'ouvre pas le bureau sécurisé :
 ; Windows la range en bouton clignotant dans la barre des tâches, masquée par Winarchy,

@@ -81,7 +81,7 @@ bars:
     widgets:
       left: ["home", "komorebi_workspaces", "taskbar"]
       center: ["clock"]
-      right: ["connections", "volume", "battery", "notifications", "systray", "winarchy_menu"]
+      right: ["ai", "system", "disques", "connections", "volume", "battery", "notifications", "systray", "winarchy_menu"]
     layouts:
       left:
         alignment: "left"
@@ -612,8 +612,8 @@ widgets:
   battery:
     type: "yasb.battery.BatteryWidget"
     options:
-      label: "<span>{icon}</span>"
-      label_alt: "<span>{icon}</span> {percent}%"
+      label: "<span>{icon}</span> {percent}%"
+      label_alt: "<span>{icon}</span>"
       hide_unsupported: true
       update_interval: 10000
       callbacks:

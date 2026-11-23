@@ -73,6 +73,14 @@ foreach ($stale in @('komorebi.sock', 'komorebi.hwnd.json')) {
         catch { Write-Log "no pude borrar $stale : $($_.Exception.Message)" }
     }
 }
+# perso: komorebi.state.json (en %TEMP%) se reaplica al arrancar (apply_state). Un estado de
+# una sesión anterior lo hace abortar (panic en com\mod.rs, 0x80040154 « Classe non
+# enregistrée ») en cada intento. En el autostart las ventanas son nuevas: se aparta.
+$stateJson = Join-Path $env:TEMP 'komorebi.state.json'
+if (Test-Path $stateJson) {
+    try { Move-Item $stateJson "$stateJson.prev" -Force -ErrorAction Stop; Write-Log 'apartado estado stale: komorebi.state.json' }
+    catch { Write-Log "no pude apartar komorebi.state.json : $($_.Exception.Message)" }
+}
 
 # El estado de game-mode es por sesión: las session-float-rules murieron con komorebi.
 # Si el flag sobrevive al reboot, AHK arranca creyéndose en juego y deja el AccentWatch
@@ -91,9 +99,13 @@ foreach ($stale in @('game-mode.flag', 'game-mode-floated')) {
 $overallDeadline = (Get-Date).AddMinutes(5)
 
 # 1) Esperar foreground real (explorer + ventana de foreground != 0), no solo explorer.
-while ((Get-Date) -lt $overallDeadline -and -not (Test-ForegroundReady)) {
+#    perso: espera acotada (60 s). Con un UAC pendiente el foreground queda en 0 todo el
+#    rato: antes se consumían los 5 min sin intentar nunca lanzar komorebi.
+$fgDeadline = (Get-Date).AddSeconds(60)
+while ((Get-Date) -lt $fgDeadline -and -not (Test-ForegroundReady)) {
     Start-Sleep -Milliseconds 500
 }
+if (-not (Test-ForegroundReady)) { Write-Log 'sin foreground tras 60 s; intento igual.' }
 Start-Sleep -Seconds 2
 
 # 2) Intentos con presupuesto de tiempo: re-esperar foreground en cada vuelta, bajar el
@@ -105,7 +117,8 @@ while ((Get-Date) -lt $overallDeadline) {
     $attempt++
 
     # Asegurar la precondición de AllowSetForegroundWindow antes de cada intento.
-    while ((Get-Date) -lt $overallDeadline -and -not (Test-ForegroundReady)) {
+    $fgDeadline = (Get-Date).AddSeconds(15)   # perso: acotado, luego se intenta igual
+    while ((Get-Date) -lt $fgDeadline -and (Get-Date) -lt $overallDeadline -and -not (Test-ForegroundReady)) {
         Start-Sleep -Milliseconds 500
     }
     [Win.Fg]::SystemParametersInfo(0x2001, 0, [System.IntPtr]::Zero, 0x3) | Out-Null

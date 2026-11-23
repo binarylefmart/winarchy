@@ -286,6 +286,49 @@ PersoCentre(hwnd) {
     MonitorGetWorkArea(PersoEcran(x, y, l, h), &g, &t, &d, &b)
     WinMove(g + (d - g - l) // 2, t + (b - t - h) // 2, , , hwnd)
 }
+
+; --- Demandes UAC en attente ----------------------------------------------------
+; Une demande d'élévation lancée depuis l'arrière-plan n'ouvre pas le bureau sécurisé :
+; Windows la range en bouton clignotant dans la barre des tâches, masquée par Winarchy,
+; et on ne la voit jamais. Bandeau rouge en haut de l'écran tant qu'elle attend ; un
+; clic l'affiche. (Quand le bureau sécurisé est ouvert, le bandeau est caché derrière.)
+global PersoUacGui := 0
+SetTimer(PersoUac, 700)
+PersoUac() {
+    global PersoUacGui
+    static depuis := 0
+    if !ProcessExist('consent.exe') {
+        depuis := 0
+        if PersoUacGui {
+            PersoUacGui.Destroy()
+            PersoUacGui := 0
+        }
+        return
+    }
+    if !depuis
+        depuis := A_TickCount
+    if (PersoUacGui || A_TickCount - depuis < 1500)
+        return
+    g := Gui('+AlwaysOnTop -Caption +ToolWindow +E0x08000000')   ; WS_EX_NOACTIVATE
+    g.BackColor := 'C0392B'
+    g.MarginY := 8
+    g.SetFont('s11 cWhite bold', 'Segoe UI')
+    t := g.AddText('Center w440', "Demande UAC en attente : clique ici pour l'afficher")
+    t.OnEvent('Click', PersoUacAffiche)
+    MonitorGetWorkArea(MonitorGetPrimary(), &gauche, &haut, &droite, &bas)
+    g.Show('NoActivate x' (gauche + (droite - gauche - 460) // 2) ' y' (haut + 40) ' w460')
+    PersoUacGui := g
+}
+PersoUacAffiche(*) {
+    try {
+        if WinExist('ahk_exe consent.exe') {
+            WinActivate()
+            if WinWaitActive(, , 1)
+                return
+        }
+    }
+    Send('#t')    ; sinon : affiche la barre des tâches masquée (bouton UAC clignotant)
+}
 '@
 
 function Ok([string]$m)   { Write-Host "  OK  $m" -ForegroundColor Green }
@@ -684,7 +727,8 @@ function Set-KomorebiAdmin([bool]$admin) {
         Set-Content -Path $tmp -Value $neuf -Encoding Unicode
         $cmd = "& schtasks.exe /Create /TN '$tache' /XML '$tmp' /F | Out-Null; exit `$LASTEXITCODE"
         $enc = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($cmd))
-        Info 'Fenêtre UAC : accepte-la pour régler komorebi (fenêtres admin tilées)'
+        Info 'Fenêtre UAC : accepte-la pour régler komorebi (fenêtres admin tilées).'
+        Info '   Pas de fenêtre ? Clique sur le bandeau rouge « Demande UAC en attente » en haut de l''écran.'
         try {
             $p = Start-Process powershell.exe -Verb RunAs -Wait -PassThru -WindowStyle Hidden -ArgumentList '-NoProfile', '-EncodedCommand', $enc
             if ($p.ExitCode -ne 0) { throw "schtasks a renvoyé $($p.ExitCode)" }
@@ -1390,6 +1434,17 @@ function Invoke-WinarchyCli([string]$Root, [string[]]$arguments) {
     return ($LASTEXITCODE -eq 0)
 }
 
+# Barre YASB : Winarchy installe sa barre native par défaut (et pas YASB) ; les réglages et
+# widgets perso de ce script visent YASB. « winarchy bar use yasb » l'installe (version
+# épinglée) au besoin, bascule l'autostart et arrête la barre native.
+function Set-BarreYasb([string]$Root) {
+    $f = Join-Path $Root 'state\bar'
+    $barre = if (Test-Path $f) { ([IO.File]::ReadAllText($f)).Trim() } else { '' }
+    if ($barre -eq 'yasb') { Info 'Barre YASB déjà active'; return }
+    if (Invoke-WinarchyCli $Root @('bar', 'use', 'yasb')) { Ok 'Barre YASB activée (à la place de la barre native)' }
+    else { Warn '« winarchy bar use yasb » a échoué : barre native conservée.' }
+}
+
 function Get-ThemeActif([string]$Root) {
     $ligne = & (Join-Path $Root 'bin\winarchy.cmd') theme list 2>$null | Where-Object { $_ -match '^\s*\*\s*(\S+)' } | Select-Object -First 1
     if ($ligne -match '^\s*\*\s*(\S+)') { return $Matches[1] }
@@ -1973,6 +2028,7 @@ if ($Komorebi) {
     $Komorebi = Find-WinarchyKomorebi
 }
 Write-Host "==> Winarchy : $Komorebi"
+Set-BarreYasb $Komorebi
 Set-ReglagesWinarchy $Komorebi
 Install-Raccourcis $Komorebi
 Save-ReglagesFork $Komorebi

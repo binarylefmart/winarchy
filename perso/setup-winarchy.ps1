@@ -1768,8 +1768,8 @@ function Edit-ModeleYasb([string]$t) {
     type: "yasb.custom.CustomWidget"
     options:
       class_name: "wifi-widget"
-      label: "{data[icone]}"
-      label_alt: "{data[icone]}"
+      label: "<span>{data[icone]}</span>"
+      label_alt: "<span>{data[icone]}</span>"
       label_placeholder: "…"
       tooltip: true
       tooltip_label: "{data[detail]}"

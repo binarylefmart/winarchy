@@ -1452,6 +1452,37 @@ function Set-BarreYasb([string]$Root) {
     else { Warn '« winarchy bar use yasb » a échoué : barre native conservée.' }
 }
 
+# Polices de la barre YASB : styles.css utilise « JetBrainsMono NFP » et « JetBrainsMonoNL NFP »
+# (variantes Propo) ; Winarchy n'installe que « JetBrainsMono NF ». Installées pour
+# l'utilisateur (sans admin) depuis la release officielle Nerd Fonts, puis YASB relancé.
+function Install-PolicesBarre([string]$Root) {
+    $dest = Join-Path $env:LOCALAPPDATA 'Microsoft\Windows\Fonts'
+    $cle = 'HKCU:\Software\Microsoft\Windows NT\CurrentVersion\Fonts'
+    $voulues = 'JetBrainsMonoNerdFontPropo-Regular.ttf', 'JetBrainsMonoNLNerdFontPropo-Regular.ttf'
+    if (-not ($voulues | Where-Object { -not (Test-Path (Join-Path $dest $_)) })) { Info 'Polices de la barre (JetBrainsMono NFP / NL NFP) déjà installées'; return }
+    $tmp = Join-Path $env:TEMP "winarchy-polices-$PID"
+    New-Item -ItemType Directory -Force $tmp, $dest | Out-Null
+    try {
+        $zip = Join-Path $tmp 'JetBrainsMono.zip'
+        Invoke-WebRequest 'https://github.com/ryanoasis/nerd-fonts/releases/download/v3.4.0/JetBrainsMono.zip' -OutFile $zip -UseBasicParsing
+        Expand-Archive $zip (Join-Path $tmp 'x') -Force
+        if (-not ('PersoWinarchy.Polices' -as [type])) {
+            Add-Type -Namespace PersoWinarchy -Name Polices -MemberDefinition '[DllImport("gdi32.dll", CharSet = CharSet.Unicode)] public static extern int AddFontResource(string f);'
+        }
+        $n = 0
+        foreach ($f in Get-ChildItem (Join-Path $tmp 'x') -Filter '*NerdFontPropo-*.ttf') {
+            $cible = Join-Path $dest $f.Name
+            if (-not (Test-Path $cible)) { Copy-Item $f.FullName $cible }
+            New-ItemProperty -Path $cle -Name "$($f.BaseName) (TrueType)" -Value $cible -PropertyType String -Force | Out-Null
+            [void][PersoWinarchy.Polices]::AddFontResource($cible)
+            $n++
+        }
+        Ok "Polices de la barre installées : $n fichiers (JetBrainsMono NFP / NL NFP)"
+        if (Invoke-WinarchyCli $Root @('reload')) { Ok 'Barre relancée avec les nouvelles polices' }
+    } catch { Warn "Polices de la barre non installées : $($_.Exception.Message)" }
+    finally { Remove-Item $tmp -Recurse -Force -ErrorAction SilentlyContinue }
+}
+
 function Get-ThemeActif([string]$Root) {
     $ligne = & (Join-Path $Root 'bin\winarchy.cmd') theme list 2>$null | Where-Object { $_ -match '^\s*\*\s*(\S+)' } | Select-Object -First 1
     if ($ligne -match '^\s*\*\s*(\S+)') { return $Matches[1] }
@@ -2123,6 +2154,7 @@ if ($Komorebi) {
 }
 Write-Host "==> Winarchy : $Komorebi"
 Set-BarreYasb $Komorebi
+Install-PolicesBarre $Komorebi
 Set-ReglagesWinarchy $Komorebi
 Install-Raccourcis $Komorebi
 Save-ReglagesFork $Komorebi

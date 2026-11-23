@@ -1877,6 +1877,11 @@ function Edit-ModeleYasb([string]$t) {
     # Edit-ModeleKomorebi). L'AppBar de YASB se réenregistrait par moments et s'ajoutait au
     # décalage de komorebi (fenêtres à ~90 px du haut au lieu de 48).
     $t = $t.Replace('windows_app_bar: true', 'windows_app_bar: false')
+    # Chemins absolus au lieu de %KOMOREBI_CONFIG_HOME% : la tâche YASB ne définit pas cette
+    # variable, et le Planificateur ne voit les variables utilisateur qu'après un redémarrage.
+    # Sans elle, logo Windows et menu ☰ (show-menu.flag) et indicateurs ne marchaient pas.
+    $etat = Join-Path (Resolve-Path (Join-Path $PSScriptRoot '..')).Path 'state'
+    $t = $t.Replace('%KOMOREBI_CONFIG_HOME%\\..\\..\\state', $etat.Replace('\', '\\')).Replace('%KOMOREBI_CONFIG_HOME%\..\..\state', $etat)
     # Batterie : pourcentage toujours affiché (clic = icône seule).
     $t = [regex]::Replace($t, '(BatteryWidget"\s*\r?\n\s*options:\s*\r?\n\s*label: )"<span>\{icon\}</span>"(\s*\r?\n\s*label_alt: )"<span>\{icon\}</span> \{percent\}%"', '${1}"<span>{icon}</span> {percent}%"${2}"<span>{icon}</span>"')
     # Zone de notification : toutes les icônes, pas seulement celles épinglées (Alt+clic).

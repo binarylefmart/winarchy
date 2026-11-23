@@ -1815,6 +1815,8 @@ function Edit-ModeleYasb([string]$t) {
     # Edit-ModeleKomorebi). L'AppBar de YASB se réenregistrait par moments et s'ajoutait au
     # décalage de komorebi (fenêtres à ~90 px du haut au lieu de 48).
     $t = $t.Replace('windows_app_bar: true', 'windows_app_bar: false')
+    # Batterie : pourcentage toujours affiché (clic = icône seule).
+    $t = [regex]::Replace($t, '(BatteryWidget"\s*\r?\n\s*options:\s*\r?\n\s*label: )"<span>\{icon\}</span>"(\s*\r?\n\s*label_alt: )"<span>\{icon\}</span> \{percent\}%"', '${1}"<span>{icon}</span> {percent}%"${2}"<span>{icon}</span>"')
     # Zone de notification : toutes les icônes, pas seulement celles épinglées (Alt+clic).
     $t = $t.Replace('show_unpinned: false', 'show_unpinned: true')
     # Écran du laptop (1536 px de large à 125 %) : trop étroit pour tous les widgets de
@@ -1848,7 +1850,7 @@ function Edit-ModeleYasb([string]$t) {
     widgets:
       left: ["home", "komorebi_workspaces", "taskbar"]
       center: ["clock"]
-      right: ["connections", "volume", "battery", "notifications", "systray", "winarchy_menu"]
+      right: ["ai", "system", "disques", "connections", "volume", "battery", "notifications", "systray", "winarchy_menu"]
     layouts:
       left:
         alignment: "left"
@@ -1863,6 +1865,9 @@ function Edit-ModeleYasb([string]$t) {
 '@) -replace '\r?\n', $nl
         $t = [regex]::Replace($t, '(?m)^(?=widgets:)', $bloc.Replace('$', '$$'), 1)
     }
+    # Widgets de droite de la barre laptop (tenus à jour même si le bloc existe déjà) :
+    # tokens Claude, perf (CPU/GPU/RAM), disques, puis l'essentiel.
+    $t = [regex]::Replace($t, '(?s)(  laptop-bar:.*?\r?\n      right: )\[[^\]]*\]', '${1}["ai", "system", "disques", "connections", "volume", "battery", "notifications", "systray", "winarchy_menu"]', 1)
     $t
 }
 

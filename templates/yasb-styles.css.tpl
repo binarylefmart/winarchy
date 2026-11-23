@@ -598,6 +598,9 @@
 .disques-widget .label.alt { color: {{colors.foreground}}; }
 .disques-reseau-widget .label,
 .disques-reseau-widget .label.alt { color: {{ui.net}}; }
+/* Icône wifi : texte brut (un <span> casse {data[...]}) ; police proportionnelle et largeur
+   minimale comme les autres icônes, sinon le glyphe est rogné. */
+.wifi-widget .label { font-family: 'JetBrainsMono NFP'; font-size: 15px; min-width: 20px; padding: 0 5px; }
 .gpu-widget .label.alt,
 .cpu-widget .label.alt,
 .memory-widget .label.alt { color: {{ui.system}}; }

@@ -274,7 +274,7 @@ function Merge-WinarchyTerminalScheme {
             if (-not $settings['profiles']['defaults'].ContainsKey('font') -or $settings['profiles']['defaults']['font'] -isnot [hashtable]) {
                 $settings['profiles']['defaults']['font'] = @{}
             }
-            $settings['profiles']['defaults']['font']['face'] = $FontFamily
+            $settings['profiles']['defaults']['font']['face'] = ($FontFamily -replace '^JetBrainsMono NF$', 'JetBrainsMono Nerd Font')   # perso: nom DirectWrite (Windows Terminal)
         }
     }
 

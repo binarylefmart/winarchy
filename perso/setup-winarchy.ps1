@@ -443,24 +443,31 @@ if (Get-Command claude -ErrorAction SilentlyContinue) {
 function Write-ScreenpressoLauncher {
     $ahk = Join-Path $Perso 'screenpresso-capture.ahk'
     New-Item -ItemType Directory -Force $Perso | Out-Null
-    Write-Utf8Bom $ahk @'
+    # Version Microsoft Store : pas d'exe lançable, on passe par son identifiant d'application.
+    $aumid = (Get-StartApps -ErrorAction SilentlyContinue | Where-Object { $_.Name -eq 'Screenpresso' } | Select-Object -First 1).AppID
+    Write-Utf8Bom $ahk (@'
 #Requires AutoHotkey v2.0
 #SingleInstance Force
 ; Lancé par le bouton capture de la barre YASB (setup-winarchy.ps1).
+; Impr. écran doit appartenir à Screenpresso : ShareX ne la réserve plus (raccourci retiré).
 exe := EnvGet('LOCALAPPDATA') '\Learnpulse\Screenpresso\Screenpresso.exe'
+store := '__AUMID__'
 if !ProcessExist('Screenpresso.exe') {
-    if !FileExist(exe) {
-        MsgBox 'Screenpresso introuvable : ' exe, 'Capture', 'Icon!'
+    if FileExist(exe)
+        Run '"' exe '"'
+    else if (store != '')
+        Run 'explorer.exe shell:AppsFolder\' store
+    else {
+        MsgBox 'Screenpresso introuvable (ni ' exe ', ni version Store).', 'Capture', 'Icon!'
         ExitApp
     }
-    Run '"' exe '"'
     if !ProcessWait('Screenpresso.exe', 10)
         ExitApp
     Sleep 2500   ; le temps qu'il enregistre son raccourci Impr. écran
 }
 Sleep 150        ; laisse le clic sur la barre se terminer
 Send '{PrintScreen}'
-'@
+'@).Replace('__AUMID__', [string]$aumid)
     Ok "Lanceur capture Screenpresso : $ahk"
 }
 

@@ -124,7 +124,7 @@ PersoDevant() {
                 if PersoEstTuilee(tuilees, hwnd)
                     continue
                 PersoVues[hwnd] := 2
-                WinSetAlwaysOnTop(1, hwnd)
+                PersoDessus(hwnd)
             }
         }
     }
@@ -154,9 +154,16 @@ PersoDevant() {
             continue
         try {
             if !(WinGetExStyle(hwnd) & 0x8)                  ; WS_EX_TOPMOST
-                WinSetAlwaysOnTop(1, hwnd)
+                PersoDessus(hwnd)
         }
     }
+}
+; Met la fenêtre « toujours au-dessus », puis remonte la barre YASB par-dessus : sinon les
+; fenêtres forcées devant la masquent (la barre doit rester visible).
+PersoDessus(hwnd) {
+    WinSetAlwaysOnTop(1, hwnd)
+    for barre in WinGetList('ahk_exe yasb.exe')
+        try DllCall('SetWindowPos', 'Ptr', barre, 'Ptr', -1, 'Int', 0, 'Int', 0, 'Int', 0, 'Int', 0, 'UInt', 0x13)   ; HWND_TOPMOST, NOMOVE|NOSIZE|NOACTIVATE
 }
 PersoClasse(hwnd) {
     classe := WinGetClass(hwnd)
@@ -168,7 +175,7 @@ PersoClasse(hwnd) {
         return
     if PersoEstNotification(hwnd, classe) {          ; notification : devant, sans focus
         PersoVues[hwnd] := 1
-        WinSetAlwaysOnTop(1, hwnd)
+        PersoDessus(hwnd)
         return
     }
     installeur := PersoEstInstalleur(hwnd, classe)
@@ -178,7 +185,7 @@ PersoClasse(hwnd) {
         titre := WinGetTitle(hwnd)
         if (explorateur && (InStr(titre, 'Propriétés') || InStr(titre, 'Properties')))
             PersoCentre(hwnd)
-        WinSetAlwaysOnTop(1, hwnd)
+        PersoDessus(hwnd)
         WinActivate(hwnd)
         return
     }
@@ -1746,6 +1753,57 @@ function Edit-ModeleYasb([string]$t) {
 
 '@ -replace '\r?\n', $(if ($t -match "`r`n") { "`r`n" } else { "`n" })
         $t =[regex]::Replace($t, '(?m)^(?=  komorebi_workspaces:)', $bloc.Replace('$', '$$'), 1)
+    }
+    # Barre toujours visible : au-dessus des fenêtres, y compris celles que devant.ahk met
+    # « toujours au-dessus » (devant.ahk la remonte ensuite par-dessus elles).
+    $t = [regex]::Replace($t, '(window_flags:\s*\r?\n\s*always_on_top:\s*)false', '${1}true')
+    # Zone de notification : toutes les icônes, pas seulement celles épinglées (Alt+clic).
+    $t = $t.Replace('show_unpinned: false', 'show_unpinned: true')
+    # Écran du laptop (1536 px de large à 125 %) : trop étroit pour tous les widgets de
+    # droite, la barre était coupée. Barre compacte à part ; un écran visé par une barre
+    # est retiré de la barre « * ». YASB nomme l'écran interne « \\.\DISPLAY1 » (pas de modèle).
+    if ($t -notmatch '(?m)^  laptop-bar:') {
+        if ($t -notmatch '(?m)^widgets:') { throw 'ancre laptop-bar absente' }
+        $nl = if ($t -match "`r`n") { "`r`n" } else { "`n" }
+        $bloc = (@'
+  # Écran du laptop (perso, setup-winarchy.ps1) : barre compacte, la barre complète y était coupée.
+  laptop-bar:
+    enabled: true
+    screens: ["\\\\.\\DISPLAY1"]
+    class_name: "yasb-bar"
+    alignment:
+      position: "{{computed.bar_position}}"
+      align: "center"
+    blur_effect:
+      enabled: false
+    window_flags:
+      always_on_top: true
+      windows_app_bar: true
+    dimensions:
+      width: "100%"
+      height: {{bar.height}}
+    padding:
+      top: 0
+      left: 0
+      bottom: 0
+      right: 0
+    widgets:
+      left: ["home", "komorebi_workspaces", "taskbar"]
+      center: ["clock"]
+      right: ["connections", "volume", "battery", "notifications", "systray", "winarchy_menu"]
+    layouts:
+      left:
+        alignment: "left"
+        stretch: true
+      center:
+        alignment: "center"
+        stretch: false
+      right:
+        alignment: "right"
+        stretch: true
+
+'@) -replace '\r?\n', $nl
+        $t = [regex]::Replace($t, '(?m)^(?=widgets:)', $bloc.Replace('$', '$$'), 1)
     }
     $t
 }

@@ -81,7 +81,7 @@ $AhkFin   = '; <<< raccourcis-perso <<<'
 # Modèles suivis par git que ce script patche (et que Sync-Upstream.ps1 sait reprendre).
 # Posé quand des règles komorebi changent : relance en fin de script (Set-KomorebiAdmin).
 $script:RedemarrerKomorebi = $false
-$ModelesPatches = @('templates\komorebi.json.tpl', 'templates\yasb-config.yaml.tpl', 'templates\yasb-styles.css.tpl', 'games.toml', 'vendor\asc\applications.json', 'module\Winarchy\Private\Util.ps1')
+$ModelesPatches = @('templates\komorebi.json.tpl', 'templates\yasb-config.yaml.tpl', 'templates\yasb-styles.css.tpl', 'games.toml', 'vendor\asc\applications.json', 'module\Winarchy\Private\Util.ps1', 'module\Winarchy\Private\ThemeEngine.ps1')
 
 # Corps de ~\.winarchy-perso\devant.ahk (voir Write-DevantScript).
 $script:CorpsDevant = @'
@@ -1572,6 +1572,17 @@ function Edit-ModeleKomorebi([string]$t) {
 # Winarchy relance komorebi en direct (Start-Process, donc sans droits admin) quand il ne
 # tourne pas au moment d'un reload / theme set. On passe par la tâche planifiée, qui le
 # lance en administrateur (voir Set-KomorebiAdmin) ; repli sur l'ancien lancement.
+# Windows Terminal cherche les polices par leur nom DirectWrite : « JetBrainsMono NF » (nom
+# GDI, celui de la barre YASB) y est introuvable et il affichait un avertissement à chaque
+# ouverture. Winarchy recopie la police de la barre dans le terminal à chaque thème : on
+# traduit le nom à cet endroit.
+function Edit-ThemeEngine([string]$t) {
+    if ($t.Contains('perso: nom DirectWrite')) { return $t }
+    $ligne = "`$settings['profiles']['defaults']['font']['face'] = `$FontFamily"
+    if (-not $t.Contains($ligne)) { throw 'ancre police Windows Terminal absente' }
+    $t.Replace($ligne, "`$settings['profiles']['defaults']['font']['face'] = (`$FontFamily -replace '^JetBrainsMono NF$', 'JetBrainsMono Nerd Font')   # perso: nom DirectWrite (Windows Terminal)")
+}
+
 function Edit-UtilKomorebi([string]$t) {
     if ($t.Contains('perso : via la tâche planifiée')) { return $t }
     $m = [regex]::Match($t, '(?s)(function Start-WinarchyKomorebi \{.*?)(\r?\n)    Start-Process \$exe -WindowStyle Hidden(\r?\n)\}')
@@ -1768,8 +1779,8 @@ function Edit-ModeleYasb([string]$t) {
     type: "yasb.custom.CustomWidget"
     options:
       class_name: "wifi-widget"
-      label: "<span>{data[icone]}</span>"
-      label_alt: "<span>{data[icone]}</span>"
+      label: "{data[icone]}"
+      label_alt: "{data[icone]}"
       label_placeholder: "…"
       tooltip: true
       tooltip_label: "{data[detail]}"
@@ -1900,6 +1911,9 @@ function Edit-ModeleYasbStyles([string]$t) {
 .disques-widget .label.alt { color: {{colors.foreground}}; }
 .disques-reseau-widget .label,
 .disques-reseau-widget .label.alt { color: {{ui.net}}; }
+/* Icône wifi : texte brut (un <span> casse {data[...]}) ; police proportionnelle et largeur
+   minimale comme les autres icônes, sinon le glyphe est rogné. */
+.wifi-widget .label { font-family: 'JetBrainsMono NFP'; font-size: 15px; min-width: 20px; padding: 0 5px; }
 .gpu-widget .label.alt,
 .cpu-widget .label.alt,
 .memory-widget .label.alt { color: {{ui.system}}; }
@@ -2000,7 +2014,7 @@ function Edit-JeuxLanceurs([string]$t) {
 function Set-ReglagesWinarchy([string]$Root) {
     Write-Host '==> Réglages perso dans les modèles de Winarchy'
     $change = $false
-    $patchs = @{ 'templates\komorebi.json.tpl' = ${function:Edit-ModeleKomorebi}; 'templates\yasb-config.yaml.tpl' = ${function:Edit-ModeleYasb}; 'templates\yasb-styles.css.tpl' = ${function:Edit-ModeleYasbStyles}; 'games.toml' = ${function:Edit-JeuxLanceurs}; 'vendor\asc\applications.json' = ${function:Edit-AscPerso}; 'module\Winarchy\Private\Util.ps1' = ${function:Edit-UtilKomorebi} }
+    $patchs = @{ 'templates\komorebi.json.tpl' = ${function:Edit-ModeleKomorebi}; 'templates\yasb-config.yaml.tpl' = ${function:Edit-ModeleYasb}; 'templates\yasb-styles.css.tpl' = ${function:Edit-ModeleYasbStyles}; 'games.toml' = ${function:Edit-JeuxLanceurs}; 'vendor\asc\applications.json' = ${function:Edit-AscPerso}; 'module\Winarchy\Private\Util.ps1' = ${function:Edit-UtilKomorebi}; 'module\Winarchy\Private\ThemeEngine.ps1' = ${function:Edit-ThemeEngine} }
     foreach ($rel in $ModelesPatches) {
         $p = Join-Path $Root $rel
         if (-not (Test-Path $p)) { Warn "$rel introuvable : réglage ignoré"; continue }
@@ -2011,7 +2025,7 @@ function Set-ReglagesWinarchy([string]$Root) {
             [IO.File]::WriteAllText($p, $apres, (New-Object Text.UTF8Encoding $false))
             Ok "$rel patché"
             $change = $true
-            if ($rel -notmatch 'yasb|Util\.ps1') { $script:RedemarrerKomorebi = $true }
+            if ($rel -notmatch 'yasb|Util\.ps1|ThemeEngine\.ps1') { $script:RedemarrerKomorebi = $true }
         } else { Info "$rel déjà à jour" }
     }
     # Règles komorebi par appli (rules.toml).

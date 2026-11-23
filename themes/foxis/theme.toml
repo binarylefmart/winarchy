@@ -1,0 +1,43 @@
+# Theme: Foxis — "Always on track". Palette relevée sur le wallpaper Foxis (synthwave) :
+# ciel nuit #0a0812 -> prune #3e1425 à l'horizon, soleil #fe9025 -> #f35905, logo #f24f00.
+# Le fond reste presque noir pour que l'orange ne serve qu'à l'accent et au focus.
+# Le rouge (color1) tire vers le framboise pour ne jamais se confondre avec l'accent orange.
+name = "Foxis"
+mode = "dark"
+
+[colors]
+background = "#0c0a12"
+foreground = "#eee2d8"
+accent = "#f25a00"
+cursor = "#ff7a1a"
+selection_background = "#5a2418"
+selection_foreground = "#fff2e8"
+color0 = "#1c1420"
+color1 = "#e0435a"
+color2 = "#9ccf6e"
+color3 = "#f5b041"
+color4 = "#7b8ce0"
+color5 = "#c8508a"
+color6 = "#4fb3bf"
+color7 = "#d8ccc4"
+color8 = "#55404c"
+color9 = "#ff5c74"
+color10 = "#b6e88a"
+color11 = "#ffc95e"
+color12 = "#9aa8f0"
+color13 = "#e070a8"
+color14 = "#6fd0da"
+color15 = "#fff6ee"
+
+# Barre : dégradé du soleil plutôt que les slots ANSI (cyan/bleu jureraient avec l'orange).
+[ui]
+system = "#fe9025"
+media = "#e07a9a"
+net = "#c4a494"
+
+[borders]
+focused = "#f25a00"
+unfocused = "#2a1d26"
+urgent = "#e0435a"
+monocle = "#fe9025"
+stack = "#c8508a"

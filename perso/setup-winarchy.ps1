@@ -1492,7 +1492,10 @@ function Edit-ModeleKomorebi([string]$t) {
     $dpi = (Get-ItemProperty 'HKCU:\Control Panel\Desktop\WindowMetrics' -Name AppliedDPI -ErrorAction SilentlyContinue).AppliedDPI
     if (-not $dpi) { $dpi = 96 }
     $haut = [int][math]::Ceiling($hauteur * $dpi / 96)
-    $t = [regex]::Replace($t, '("global_work_area_offset":\s*\{\s*"left":\s*\d+,\s*"top":\s*)\d+', "`${1}$haut")
+    # Pour komorebi, « bottom » se soustrait de la hauteur : décaler le haut sans retirer la
+    # même hauteur faisait déborder les tuiles sous l'écran. 2 = marge d'origine (barre des
+    # tâches masquée).
+    $t = [regex]::Replace($t, '("global_work_area_offset":\s*\{\s*"left":\s*\d+,\s*"top":\s*)\d+(,\s*"right":\s*\d+,\s*"bottom":\s*)\d+', "`${1}$haut`${2}$($haut + 2)")
     # Portable + 3 écrans externes : le modèle ne décrit que 2 écrans, on complète jusqu'à 4
     # (10 bureaux chacun, comme le 2e). Un écran absent ne gêne pas komorebi.
     $i = $t.IndexOf('"monitors": [')

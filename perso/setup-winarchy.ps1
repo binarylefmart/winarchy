@@ -1526,18 +1526,37 @@ function Edit-UtilKomorebi([string]$t) {
 $script:AscSansIgnore = @('Zoom', 'Microsoft Teams classic', 'Calculator', '1Password', 'Dropbox', 'Google Drive',
     'paint.net', 'TeraCopy', 'QuickLook', 'Affinity Photo 2', 'Process Hacker', 'System Informer', 'PowerToys',
     'Logi Bolt', 'Logitech Options', 'LogiTune', 'Unity', 'Unreal Engine', 'Task Manager')
+# Le traitement tourne toujours dans PowerShell 7 : -AsHashtable n'existe pas dans Windows
+# PowerShell 5.1 (lancement documenté « powershell -File ») et son ConvertTo-Json ne formate
+# pas pareil (le fichier changerait à chaque lancement).
+$script:CodeAsc = @'
+param([string]$Entree, [string]$Sortie, [string]$SansIgnore)
+$sans = $SansIgnore -split '\|'
+$asc = [IO.File]::ReadAllText($Entree) | ConvertFrom-Json -AsHashtable
+if (-not $asc.Contains('Zoom')) { throw 'format ASC inattendu' }
+foreach ($app in @($asc.Keys)) {
+    if ($app.StartsWith('$')) { continue }
+    $cats = @('floating') + @(if ($app -in $sans) { 'ignore' })
+    foreach ($c in $cats) { if ($asc[$app].Contains($c)) { $asc[$app].Remove($c) } }
+}
+# Explorateur : on garde ses autres ignore (progression de copie…), pas celui du Panneau de configuration.
+$ex = $asc['Windows Explorer']
+if ($ex -and $ex.Contains('ignore')) { $ex['ignore'] = @($ex['ignore'] | Where-Object { $_.id -ne 'Control Panel' }) }
+[IO.File]::WriteAllText($Sortie, (($asc | ConvertTo-Json -Depth 20) + "`n"), [Text.UTF8Encoding]::new($false))
+'@
 function Edit-AscPerso([string]$t) {
-    $asc = $t | ConvertFrom-Json -AsHashtable
-    if (-not $asc.Contains('Zoom')) { throw 'format ASC inattendu' }
-    foreach ($app in @($asc.Keys)) {
-        if ($app.StartsWith('$')) { continue }
-        $cats = @('floating') + @(if ($app -in $script:AscSansIgnore) { 'ignore' })
-        foreach ($c in $cats) { if ($asc[$app].Contains($c)) { $asc[$app].Remove($c) } }
-    }
-    # Explorateur : on garde ses autres ignore (progression de copie…), pas celui du Panneau de configuration.
-    $ex = $asc['Windows Explorer']
-    if ($ex -and $ex.Contains('ignore')) { $ex['ignore'] = @($ex['ignore'] | Where-Object { $_.id -ne 'Control Panel' }) }
-    ($asc | ConvertTo-Json -Depth 20) + "`n"
+    $pwsh = (Get-Command pwsh -ErrorAction SilentlyContinue).Source
+    if (-not $pwsh) { throw 'PowerShell 7 (pwsh) introuvable' }
+    $dir = Join-Path $env:TEMP "winarchy-asc-$PID"
+    New-Item -ItemType Directory -Force $dir | Out-Null
+    try {
+        $ps1 = Join-Path $dir 'asc.ps1'; $in = Join-Path $dir 'in.json'; $out = Join-Path $dir 'out.json'
+        [IO.File]::WriteAllText($ps1, $script:CodeAsc, (New-Object Text.UTF8Encoding $true))
+        [IO.File]::WriteAllText($in, $t, (New-Object Text.UTF8Encoding $false))
+        $sortiePwsh = & $pwsh -NoProfile -ExecutionPolicy Bypass -File $ps1 -Entree $in -Sortie $out -SansIgnore ($script:AscSansIgnore -join '|') 2>&1 | Out-String
+        if ($LASTEXITCODE -ne 0 -or -not (Test-Path $out)) { throw "pwsh : $($sortiePwsh.Trim())" }
+        [IO.File]::ReadAllText($out)
+    } finally { Remove-Item $dir -Recurse -Force -ErrorAction SilentlyContinue }
 }
 
 # Barre YASB : groupes toujours dépliés, et pas de compteur Codex.

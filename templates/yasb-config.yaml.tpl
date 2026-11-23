@@ -32,7 +32,7 @@ bars:
       enabled: false
     window_flags:
       always_on_top: true
-      windows_app_bar: false
+      windows_app_bar: true
     dimensions:
       width: "100%"
       height: {{bar.height}}
@@ -69,7 +69,7 @@ bars:
       enabled: false
     window_flags:
       always_on_top: true
-      windows_app_bar: false
+      windows_app_bar: true
     dimensions:
       width: "100%"
       height: {{bar.height}}

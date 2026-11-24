@@ -1571,6 +1571,30 @@ function Install-PolicesBarre([string]$Root) {
     finally { Remove-Item $tmp -Recurse -Force -ErrorAction SilentlyContinue }
 }
 
+# Surveillance de la zone réservée par YASB (perso\Watch-YasbZone.ps1) : YASB perd parfois
+# son AppBar sur un écran après un changement de géométrie ; la tâche relance YASB et retile.
+function Set-SurveillanceBarre([string]$Root, [bool]$active) {
+    $nom = 'yasb-zone'; $dossier = '\Winarchy\'
+    if (-not $active) {
+        if (Get-ScheduledTask -TaskName $nom -TaskPath $dossier -ErrorAction SilentlyContinue) {
+            Stop-ScheduledTask -TaskName $nom -TaskPath $dossier -ErrorAction SilentlyContinue
+            Unregister-ScheduledTask -TaskName $nom -TaskPath $dossier -Confirm:$false
+            Ok 'Surveillance de la zone de la barre YASB retirée'
+        }
+        return
+    }
+    $script = Join-Path $Root 'perso\Watch-YasbZone.ps1'
+    if (-not (Test-Path $script)) { Warn "Surveillance de la barre non installée : $script introuvable"; return }
+    $action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$script`""
+    $trigger = New-ScheduledTaskTrigger -AtLogOn -User "$env:USERDOMAIN\$env:USERNAME"
+    $trigger.Delay = 'PT30S'
+    $reglages = New-ScheduledTaskSettingsSet -ExecutionTimeLimit ([TimeSpan]::Zero) -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -MultipleInstances IgnoreNew
+    $principal = New-ScheduledTaskPrincipal -UserId "$env:USERDOMAIN\$env:USERNAME" -LogonType Interactive -RunLevel Limited
+    Register-ScheduledTask -TaskName $nom -TaskPath $dossier -Action $action -Trigger $trigger -Settings $reglages -Principal $principal -Force | Out-Null
+    Start-ScheduledTask -TaskName $nom -TaskPath $dossier
+    Ok 'Surveillance de la zone de la barre YASB active (tâche \Winarchy\yasb-zone)'
+}
+
 function Get-ThemeActif([string]$Root) {
     $ligne = & (Join-Path $Root 'bin\winarchy.cmd') theme list 2>$null | Where-Object { $_ -match '^\s*\*\s*(\S+)' } | Select-Object -First 1
     if ($ligne -match '^\s*\*\s*(\S+)') { return $Matches[1] }
@@ -2250,6 +2274,7 @@ if ($Desinstaller) {
     if ($LASTEXITCODE -eq 0) { Ok 'Modèles remis comme dans le projet d''origine' } else { Warn 'Modèles non remis d''origine (git checkout).' }
     Update-ThemeActif $Komorebi
     Install-Raccourcis $Komorebi
+    Set-SurveillanceBarre $Komorebi $false
     exit 0
 }
 
@@ -2262,6 +2287,7 @@ if ($Komorebi) {
 Write-Host "==> Winarchy : $Komorebi"
 Set-BarreYasb $Komorebi
 Install-PolicesBarre $Komorebi
+Set-SurveillanceBarre $Komorebi $true
 Set-ReglagesWinarchy $Komorebi
 Install-Raccourcis $Komorebi
 Save-ReglagesFork $Komorebi

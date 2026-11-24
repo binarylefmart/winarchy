@@ -690,7 +690,14 @@ widgets:
       label_collapsed: "▸"
       label_expanded: "▾"
       pin_click_modifier: "alt"
-      show_unpinned: true
+      show_unpinned: false
+      show_in_popup: true
+      icons_per_row: 6
+      popup:
+        alignment: "right"
+        direction: "down"
+        offset_top: 6
+        offset_left: 0
       # Tray propio de ShareX, oculto en la barra.
       hide_icons: ["ShareX"]
 

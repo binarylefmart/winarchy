@@ -608,6 +608,8 @@
 .ai-grouper .widget,
 .system-grouper .widget,
 .connections-grouper .widget { padding: 0 6px; }
+/* Icônes du systray à taille fixe : sinon Qt les compresse et elles se chevauchent. */
+.systray .button { min-width: 20px; max-width: 20px; min-height: 20px; }
 
 /* Popups opaques (perso, setup-winarchy.ps1) : tous les popups YASB (noms tirés de library.zip) */
 .bluetooth-menu,

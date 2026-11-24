@@ -1727,6 +1727,26 @@ function Edit-AscPerso([string]$t) {
 # Barre YASB : groupes toujours dépliés, et pas de compteur Codex.
 function Edit-ModeleYasb([string]$t) {
     $t = [regex]::Replace($t, '(collapse_options:\s*\r?\n\s*enabled:\s*)true', '${1}false')
+    # Systray replié par défaut : déplié, il ne tenait pas dans la barre complète du BenQ
+    # (1920 px) et les icônes s'écrasaient. Clic sur ▸ pour les voir, Alt+clic pour épingler.
+    $t = $t.Replace('show_unpinned: true', 'show_unpinned: false')
+    # Icônes non épinglées dans un popup sous ▸ : dépliées dans la barre, elles poussaient
+    # et écrasaient les autres widgets.
+    if ($t -notmatch 'show_in_popup:') {
+        if ($t -notmatch '(?m)^      show_unpinned: false\r?$') { throw 'ancre systray popup absente' }
+        $nlP = if ($t -match "`r`n") { "`r`n" } else { "`n" }
+        $bloc = (@'
+      show_in_popup: true
+      icons_per_row: 6
+      popup:
+        alignment: "right"
+        direction: "down"
+        offset_top: 6
+        offset_left: 0
+
+'@) -replace '\r?\n', $nlP
+        $t = [regex]::Replace($t, '(?m)^(      show_unpinned: false\r?\n)', '${1}' + $bloc.Replace('$', '$$'), 1)
+    }
     $t = $t.Replace('widgets: ["claude_usage", "codex_usage"]', 'widgets: ["claude_usage"]')
     # Bouton capture -> Screenpresso ; pas de boutons d'enregistrement vidéo (ni son « stop »).
     $t = $t.Replace('tooltip_label: "Region capture"', 'tooltip_label: "Capture (Screenpresso)"')
@@ -2019,6 +2039,8 @@ function Edit-ModeleYasbStyles([string]$t) {
 .ai-grouper .widget,
 .system-grouper .widget,
 .connections-grouper .widget { padding: 0 6px; }
+/* Icônes du systray à taille fixe : sinon Qt les compresse et elles se chevauchent. */
+.systray .button { min-width: 20px; max-width: 20px; min-height: 20px; }
 '@ + "`n") -replace '\r?\n', $nl
     # Popups Bluetooth et volume : transparents d'origine (illisibles) → même fond que wifi/home.
     $t = [regex]::Replace($t, '(?ms)\r?\n\r?\n/\* Popups opaques \(perso, setup-winarchy\.ps1\).*?(?=\r?\n\r?\n|\s*\z)', '')

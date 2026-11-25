@@ -80,3 +80,66 @@ matching_strategy = "Equals"
 
 [[manage]]
 class = "ESET Main Frame"
+
+
+[[floating]]
+title = "fonctionnalit"
+matching_strategy = "Contains"
+
+[[floating]]
+exe = "Taskmgr.exe"
+
+[[manage]]
+exe = "rustdesk.exe"
+
+[[tray_and_multi_window]]
+exe = "Screenpresso.exe"
+
+[[ignore]]
+title = "Screenpresso"
+matching_strategy = "Equals"
+
+# Installateurs : toujours flottants, sinon leurs fenêtres passent derrière les fenêtres tuilées
+[[floating]]
+exe = "msiexec.exe"
+
+[[floating]]
+exe = "CWAInstaller.exe"
+
+[[floating]]
+exe = "WspUsbDriverInstaller.exe"
+
+[[manage]]
+exe = "SelfService.exe"
+
+[[manage]]
+exe = "CDViewer.exe"
+
+[[manage]]
+exe = "wfica32.exe"
+
+[[manage]]
+exe = "workspaces.exe"
+
+# WorkSpaces : seulement la fenêtre de session (titre = nom du WorkSpace). Avec exe =,
+# komorebi gérait aussi "ToolbarWindow", un calque transparent plein écran posé sur la
+# session : écran coupé en deux puis clics bloqués (manage passe avant ignore).
+[[manage]]
+title = "Swissmarine"
+
+[[ignore]]
+title = "ToolbarWindow"
+matching_strategy = "Equals"
+
+# Rappels Outlook (#32770 « N rappel(s) ») : non gérée, elle passait derrière les fenêtres
+# tuilées. Flottante, komorebi la garde au-dessus.
+[[floating]]
+title = "rappel(s)"
+matching_strategy = "EndsWith"
+
+# Teams (ms-teams.exe, classe TeamsWebView) : jamais pris en charge tout seul. On cible
+# la fenêtre principale par titre (« … | Microsoft Teams ») plutôt que par exe, pour ne
+# pas tuiler les toasts et fenêtres annexes.
+[[manage]]
+title = "| Microsoft Teams"
+matching_strategy = "EndsWith"

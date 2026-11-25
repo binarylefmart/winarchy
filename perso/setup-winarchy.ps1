@@ -32,9 +32,7 @@
 
   Raccourcis (ils passent devant ceux de Winarchy) :
         Super+Backspace            Claude Code (Foxis)
-        Super+Shift+Backspace      Claude Code (perso)
-        Super+Ctrl+Shift+Backspace Claude Desktop (ouvre / affiche / replie ; Super+Shift+A ne fait plus rien)
-        Super+Ctrl+Alt+Shift+Backspace  idem (Claude Desktop pro)
+        Super+Shift+Backspace      Claude Desktop (ouvre / affiche / replie ; Super+Shift+A ne fait plus rien)
         Super+Ctrl+Alt+Shift+Entrée  Claude Desktop perso (2e instance, compte perso ; ouvre / affiche / replie)
         Super+A / Super+Alt+Tab    Exposé (Vue des tâches de Windows)
         Super+O                    Outlook classique (Obsidian n'a plus de raccourci ; Super+Shift+O ne fait plus rien)
@@ -62,6 +60,8 @@
         Super+Shift+S              Ramener toutes les fenêtres réduites par Super+S
         Super+P                    Projeter, le menu de Windows (Winarchy y mettait la pause du tiling)
   Et le focus suit la souris (survol = fenêtre active, comme sous Omarchy).
+  Clic du milieu = coller (coller-clic-milieu.ahk, dossier Démarrage de la session).
+  Règles komorebi perso (WorkSpaces, Teams, Citrix, RustDesk, installateurs…) : voir $voulues.
   komorebi tourne en administrateur pour tiler aussi les fenêtres admin (une fenêtre UAC
   au premier lancement ; -Desinstaller le remet en droits limités).
 #>
@@ -92,7 +92,7 @@ $script:CorpsDevant = @'
 ; plein écran, maximisées, réduites, minuscules, jeux de games.toml, éléments système.
 ; Une fenêtre que komorebi finit par tuiler redevient normale.
 ; Cas particuliers, traités tout de suite :
-;  - boîtes de dialogue #32770 RATTACHÉES à une autre, TOUTES celles de l'Explorateur
+;  - boîtes de dialogue #32770 RATTACHÉES à une autre, TOUTES celles de l'Explorateur et de YASB
 ;    (« Supprimer plusieurs éléments » n'est rattachée à rien) et installeurs /
 ;    désinstalleurs (PersoEstInstalleur) : devant ET activées ; les « Propriétés » de
 ;    l'Explorateur sont en plus centrées ;
@@ -124,6 +124,7 @@ PersoDevant() {
                 if PersoEstTuilee(tuilees, hwnd)
                     continue
                 PersoVues[hwnd] := 2
+                PersoVersSouris(hwnd)
                 PersoDessus(hwnd)
             }
         }
@@ -179,12 +180,13 @@ PersoClasse(hwnd) {
         return
     }
     installeur := PersoEstInstalleur(hwnd, classe)
-    explorateur := (WinGetProcessName(hwnd) = 'explorer.exe')
+    explorateur := (WinGetProcessName(hwnd) ~= 'i)^(explorer|yasb)\.exe$')   ; yasb : « Vider la corbeille » du widget
     if (installeur || (classe = '#32770' && (explorateur || DllCall('GetWindow', 'Ptr', hwnd, 'UInt', 4, 'Ptr')))) {
         PersoVues[hwnd] := 1
         titre := WinGetTitle(hwnd)
         if (explorateur && (InStr(titre, 'Propriétés') || InStr(titre, 'Properties')))
             PersoCentre(hwnd)
+        PersoVersSouris(hwnd)
         PersoDessus(hwnd)
         WinActivate(hwnd)
         return
@@ -201,8 +203,12 @@ PersoFlottanteEligible(hwnd) {
         return false
     if (WinGetExStyle(hwnd) & 0x88)                  ; fenêtre outil, ou déjà au-dessus
         return false
+    ; Rattachée à une autre et sans barre de titre : menu clic droit ou liste déroulante
+    ; (« Hôte contextuel » de l'Explorateur…). Les forcer devant les referme aussitôt.
+    if (DllCall('GetWindow', 'Ptr', hwnd, 'UInt', 4, 'Ptr') && (WinGetStyle(hwnd) & 0xC00000) != 0xC00000)
+        return false
     classe := WinGetClass(hwnd)
-    if (InStr(classes, '|' classe '|') || InStr(classe, 'komoborder'))
+    if (InStr(classes, '|' classe '|') || InStr(classe, 'komoborder') || InStr(classe, 'PopupWindowSiteBridge'))
         return false
     exe := WinGetProcessName(hwnd)
     if (InStr(exes, '|' exe '|') || PersoEstJeu(exe))
@@ -288,6 +294,39 @@ PersoEcran(x, y, l, h) {
     }
     return ecran
 }
+; Fenêtre flottante ouverte sur un autre écran que la souris (Gestionnaire des tâches,
+; Programmes et fonctionnalités, installeurs…) : centrée sur l'écran de la souris. Pas
+; les fenêtres rattachées à une autre : elles restent à côté de leur parente. En deux
+; temps : Windows la redimensionne s'il change d'échelle (125 % / 100 %) en arrivant.
+PersoVersSouris(hwnd) {
+    if DllCall('GetWindow', 'Ptr', hwnd, 'UInt', 4, 'Ptr')
+        return
+    ctx := DllCall('SetThreadDpiAwarenessContext', 'Ptr', -4, 'Ptr')   ; coordonnées réelles
+    try {
+        CoordMode('Mouse', 'Screen')
+        MouseGetPos(&mx, &my)
+        WinGetPos(&x, &y, &l, &h, hwnd)
+        cible := PersoEcran(mx, my, 0, 0)
+        if (PersoEcran(x, y, l, h) != cible) {
+            Loop 2 {
+                MonitorGetWorkArea(cible, &g, &t, &d, &b)
+                l := Min(l, d - g), h := Min(h, b - t)
+                WinMove(g + (d - g - l) // 2, t + (b - t - h) // 2, l, h, hwnd)
+                Sleep(150)
+                WinGetPos(, , &l, &h, hwnd)
+            }
+        }
+    }
+    DllCall('SetThreadDpiAwarenessContext', 'Ptr', ctx, 'Ptr')
+}
+; Ctrl+Maj+Échap rappelle souvent la fenêtre déjà ouverte du Gestionnaire des tâches (pas
+; une nouvelle) : on la ramène aussi sur l'écran de la souris. Ici (UI Access) parce
+; qu'il tourne en administrateur.
+~^+Esc::SetTimer(PersoTaskmgrIci, -600)
+PersoTaskmgrIci() {
+    if (hwnd := WinExist('ahk_class TaskManagerWindow ahk_exe Taskmgr.exe'))
+        try PersoVersSouris(hwnd)
+}
 PersoCentre(hwnd) {
     WinGetPos(&x, &y, &l, &h, hwnd)
     MonitorGetWorkArea(PersoEcran(x, y, l, h), &g, &t, &d, &b)
@@ -306,6 +345,17 @@ PersoCacheBarreWindows() {
         if (exe ~= 'i)^(StartMenuExperienceHost|SearchHost|ShellExperienceHost|ShellHost)\.exe$'
             || cl ~= '^(Shell_TrayWnd|Shell_SecondaryTrayWnd|TopLevelWindowForOverflowXamlIsland|NotifyIconOverflowWindow|XamlExplorerHostIslandWindow)$')
             return
+    }
+    ; Super+Espace vient d'afficher la barre (repère de moins de 1,5 s) : Démarrer n'a peut-être
+    ; pas encore le focus, on ne recache rien.
+    reprise := A_Temp '\winarchy-perso-komorebi-pause'
+    if FileExist(reprise) && DateDiff(A_Now, FileGetTime(reprise, 'M'), 'Seconds') < 2
+        return
+    ; Fin de Super+Espace : focus au survol remis. Fait AVANT le test des barres visibles :
+    ; en masquage auto, Windows recache souvent la barre lui-même et on sortait sans le remettre.
+    if FileExist(reprise) {
+        try FileDelete(reprise)
+        DllCall('SystemParametersInfo', 'UInt', 0x1001, 'UInt', 0, 'Ptr', 1, 'UInt', 3)
     }
     visibles := []
     for classe in ['Shell_TrayWnd', 'Shell_SecondaryTrayWnd']
@@ -360,14 +410,27 @@ PersoUac() {
     PersoUacGui := g
 }
 PersoUacAffiche(*) {
-    try {
-        if WinExist('ahk_exe consent.exe') {
-            WinActivate()
-            if WinWaitActive(, , 1)
-                return
+    ; consent.exe tourne en SYSTEM : « ahk_exe » ne peut pas lire son nom. Sa fenêtre
+    ; d'attente (classe ci-dessous) est RÉDUITE : l'activer ne fait rien, il faut lui
+    ; envoyer WM_SYSCOMMAND/SC_RESTORE, comme un clic sur son bouton de barre des tâches.
+    ; Marche parce que ce script tourne en UI Access (sinon UIPI bloque le message).
+    dhw := DetectHiddenWindows(true)
+    pid := ProcessExist('consent.exe')
+    for crit in ['ahk_class $$$Secure UAP Dummy Window Class For Interim Dialog', pid ? 'ahk_pid ' pid : '']
+        try if (crit && (h := WinExist(crit))) {
+            PostMessage(0x0112, 0xF120, 0, , h)          ; WM_SYSCOMMAND, SC_RESTORE
+            DllCall('SwitchToThisWindow', 'Ptr', h, 'Int', 1)
+            DetectHiddenWindows(dhw)
+            return
         }
-    }
-    Send('#t')    ; sinon : affiche la barre des tâches masquée (bouton UAC clignotant)
+    ; Sinon : la vraie barre des tâches (cachée par Winarchy), visible et active ; le bouton
+    ; UAC y clignote. PersoCacheBarreWindows la recache dès qu'elle perd le focus.
+    PersoMasquageAuto(false)
+    for classe in ['Shell_TrayWnd', 'Shell_SecondaryTrayWnd']
+        for h in WinGetList('ahk_class ' classe)
+            try WinShow(h)
+    try WinActivate('ahk_class Shell_TrayWnd')
+    DetectHiddenWindows(dhw)
 }
 '@
 
@@ -486,6 +549,45 @@ Send '#v'
     Ok "Lanceur presse-papiers (Win+V) : $ahk"
 }
 
+# Clic du milieu = coller (Ctrl+V), lancé à chaque ouverture de session (dossier Démarrage).
+# Hors du bloc user.ahk : script indépendant, comme sur le poste d'origine.
+function Install-ColleClicMilieu([bool]$actif) {
+    $demarrage = [Environment]::GetFolderPath('Startup')
+    $ahk = Join-Path $demarrage 'coller-clic-milieu.ahk'
+    if (-not $actif) {
+        Get-CimInstance Win32_Process -Filter "Name LIKE 'AutoHotkey%'" -ErrorAction SilentlyContinue |
+            Where-Object { $_.CommandLine -like '*coller-clic-milieu.ahk*' } |
+            ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+        if (Test-Path $ahk) { Remove-Item $ahk -Force; Ok 'Clic du milieu = coller : retiré' }
+        return
+    }
+    Write-Utf8Bom $ahk @'
+#Requires AutoHotkey v2.0
+#SingleInstance Force
+
+; Clic du milieu = coller (Ctrl+V). Écrit par setup-winarchy.ps1.
+; - Windows Terminal : toujours (y compris dans Claude Code).
+; - Ailleurs (navigateurs, VS Code, Bloc-notes, Word...) : seulement si le
+;   pointeur est un curseur texte (barre "I"). Un clic gauche place d'abord le
+;   curseur à l'endroit visé, puis colle.
+;   Sur un lien, un onglet ou une zone sans texte, le clic du milieu reste normal.
+
+#HotIf WinActive("ahk_exe WindowsTerminal.exe")
+MButton::Send "^v"
+#HotIf
+
+#HotIf !WinActive("ahk_exe WindowsTerminal.exe") && A_Cursor = "IBeam"
+MButton:: {
+    Click
+    Send "^v"
+}
+#HotIf
+'@
+    $exe = Find-AhkV2
+    if ($exe) { Start-Process $exe -ArgumentList "`"$ahk`"" }   # #SingleInstance Force : remplace l'instance en cours
+    Ok "Clic du milieu = coller : $ahk"
+}
+
 # Logo Windows de la barre YASB -> lanceur d'applis Flow (comme Super seul) : raccourci natif
 # de Flow (Alt+Espace), ou démarrage de Flow s'il ne tourne pas encore.
 function Write-LanceurAppsLauncher {
@@ -553,6 +655,430 @@ if (-not $disques) { $detail = @('Disques : lecture impossible (délai dépassé
 } | ConvertTo-Json -Compress
 '@
     Ok "Script disques (barre YASB) : $ps1"
+}
+
+# Widget « rdv » de la barre YASB : prochain rendez-vous Outlook (lu par COM, même Outlook fermé).
+# rdv-bulle.ahk : bulle sous la barre, RDV de la semaine en cours au clic droit, alerte clignotante sur
+# tous les écrans 5 min avant chaque RDV (Rappel 5 min / Outlook / OK), ouverte par rdv.ps1.
+function Write-RdvScript {
+    $ps1 = Join-Path $Perso 'rdv.ps1'
+    New-Item -ItemType Directory -Force $Perso | Out-Null
+    Write-Utf8Bom $ps1 @'
+# Lancé chaque minute par le widget « rdv » de la barre YASB (setup-winarchy.ps1), en arrière-plan.
+# Lit le calendrier d'Outlook classique par COM : s'il est fermé, Outlook démarre sans fenêtre le
+# temps de la lecture puis se referme. Résultat gardé dans rdv.json et relu entre deux lectures
+# (toutes les 2 min si Outlook tourne, toutes les 10 min sinon).
+# Sortie JSON : barre, alt (avec le lieu), detail (bulle d'aide au survol : détail du prochain RDV).
+# Écrit rdv-bulle.txt (RDV de la semaine en cours, lu par rdv-bulle.ahk : clic droit) et ouvre la bulle d'alerte $bulle minutes
+# avant chaque RDV. La bulle répond dans rdv-actions.txt (« ok » ou « snooze » jusqu'à une heure).
+#   -Actualiser : relit Outlook tout de suite.
+param([switch]$Actualiser)
+[Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)
+$avance = 15        # minutes : le widget passe en « dans N min »
+$bulle = 5          # minutes : la bulle d'alerte s'ouvre
+$dossier = Split-Path $MyInvocation.MyCommand.Path
+$fCache = Join-Path $dossier 'rdv.json'
+$fEtat = Join-Path $dossier 'rdv-etat.json'
+$fBulle = Join-Path $dossier 'rdv-bulle.txt'
+$fActions = Join-Path $dossier 'rdv-actions.txt'
+$ahk = Join-Path $dossier 'rdv-bulle.ahk'
+$utf8 = New-Object Text.UTF8Encoding $false
+$icCal = [char]::ConvertFromUtf32(0xF00F0)      # nf-md-calendar_clock
+$icVide = [char]::ConvertFromUtf32(0xF00ED)     # nf-md-calendar
+$icAlerte = [char]::ConvertFromUtf32(0xF009E)   # nf-md-bell_ring
+$maintenant = Get-Date
+$lundi = $maintenant.Date.AddDays(-(([int]$maintenant.DayOfWeek + 6) % 7))
+
+function Read-JsonFichier([string]$f) {
+    try { if (Test-Path $f) { return ([IO.File]::ReadAllText($f) | ConvertFrom-Json) } } catch {}
+    $null
+}
+function Get-Court([string]$s, [int]$n = 28) { if ($s.Length -gt $n) { $s.Substring(0, $n - 1) + '…' } else { $s } }
+function Get-Propre([string]$s) { ($s -replace '[\t\r\n]+', ' ').Trim() }
+
+function Read-CalendrierOutlook {
+    $ol = New-Object -ComObject Outlook.Application
+    try {
+        $items = $ol.GetNamespace('MAPI').GetDefaultFolder(9).Items   # 9 = olFolderCalendar
+        $items.IncludeRecurrences = $true
+        $items.Sort('[Start]')
+        # Semaine en cours (lundi -> dimanche) pour la bulle du clic droit, et au moins jusqu'à demain soir
+        # pour le prochain RDV du widget (le dimanche, la semaine suivante n'est pas encore lue).
+        $de = $lundi.ToString('g'); $a = (@($lundi.AddDays(7), $maintenant.Date.AddDays(2)) | Measure-Object -Maximum).Maximum.ToString('g')
+        foreach ($i in $items.Restrict("[Start] < '$a' AND [End] > '$de'")) {
+            # Refusés (4) et annulés (5, 7) : ignorés.
+            if ($i.ResponseStatus -eq 4 -or $i.MeetingStatus -in 5, 7) { continue }
+            [pscustomobject]@{
+                debut = $i.Start.ToString('s'); fin = $i.End.ToString('s')
+                sujet = [string]$i.Subject; lieu = [string]$i.Location; journee = [bool]$i.AllDayEvent
+                organisateur = [string]$i.Organizer
+            }
+        }
+    } finally { [void][Runtime.InteropServices.Marshal]::FinalReleaseComObject($ol) }
+}
+
+# Clic du milieu sur le widget (exec_custom : relance immédiate du widget) : la souris est alors au
+# centre d'une barre YASB -> lecture forcée d'Outlook. Survol prolongé : même effet, sans gravité.
+if (-not $Actualiser) {
+    try {
+        Add-Type -AssemblyName System.Windows.Forms
+        $pos = [Windows.Forms.Cursor]::Position; $ecr = [Windows.Forms.Screen]::FromPoint($pos).Bounds
+        if ($pos.Y - $ecr.Top -lt 50 -and [math]::Abs($pos.X - ($ecr.Left + $ecr.Width / 2)) -lt 400) { $Actualiser = $true }
+    } catch {}
+}
+
+# --- Lecture d'Outlook (si le cache est trop vieux), une seule à la fois ---
+$cache = Read-JsonFichier $fCache
+$outlook = @(Get-Process OUTLOOK -ErrorAction SilentlyContinue)
+$age = if ($cache) { ($maintenant - [datetime]$cache.lu).TotalMinutes } else { [double]::MaxValue }
+$erreur = $null
+if ($Actualiser -or $age -ge $(if ($outlook) { 2 } else { 10 })) {
+    $mutex = New-Object Threading.Mutex($false, 'Local\winarchy-rdv')
+    $libre = try { $mutex.WaitOne(0) } catch [Threading.AbandonedMutexException] { $true }
+    if ($libre) {
+        try {
+            $rdv = @(Read-CalendrierOutlook)
+            $cache = [pscustomobject]@{ lu = $maintenant.ToString('s'); rdv = $rdv }
+            [IO.File]::WriteAllText($fCache, (ConvertTo-Json $cache -Depth 4 -Compress), $utf8)
+        } catch { $erreur = $_.Exception.Message }
+        finally { $mutex.ReleaseMutex() }
+    }
+}
+
+# --- Rendez-vous de la journée et à venir ---
+$tous = @(foreach ($r in @($cache.rdv)) {
+    if (-not $r) { continue }
+    [pscustomobject]@{ debut = [datetime]$r.debut; fin = [datetime]$r.fin; sujet = Get-Propre $r.sujet; lieu = Get-Propre $r.lieu
+        organisateur = Get-Propre $r.organisateur; journee = [bool]$r.journee; cle = "$($r.debut)|$(Get-Propre $r.sujet)" }
+}) | Where-Object { $_.fin -gt $lundi } | Sort-Object debut
+$evts = @($tous | Where-Object { $_.fin -gt $maintenant })
+$horaires = @($evts | Where-Object { -not $_.journee })
+
+# Données de la bulle (depuis lundi) : clé, début, fin, journée, sujet, lieu, séparés par des tabulations.
+$lignes = foreach ($e in $tous) { ($e.cle, $e.debut.ToString('yyyyMMddHHmmss'), $e.fin.ToString('yyyyMMddHHmmss'), [int]$e.journee, $e.sujet, $e.lieu) -join "`t" }
+# Écrit seulement si changé, et remplacé d'un coup : la bulle ne lit jamais un fichier à moitié écrit.
+$texteBulle = @($lignes) -join "`n"
+if (-not (Test-Path $fBulle) -or [IO.File]::ReadAllText($fBulle) -cne $texteBulle) {
+    $tmp = "$fBulle.$PID.tmp"
+    [IO.File]::WriteAllText($tmp, $texteBulle, $utf8)
+    try { if (Test-Path $fBulle) { [IO.File]::Replace($tmp, $fBulle, $null) } else { [IO.File]::Move($tmp, $fBulle) } }
+    catch { Remove-Item $tmp -Force -ErrorAction SilentlyContinue }
+}
+
+# --- État : bulles déjà ouvertes, « OK » et rappels de la bulle (purgé après 2 jours) ---
+# Une barre par écran lance ce script : verrou pour n'ouvrir qu'une seule bulle.
+$verrou = New-Object Threading.Mutex($false, 'Local\winarchy-rdv-etat')
+try { [void]$verrou.WaitOne(10000) } catch [Threading.AbandonedMutexException] {}
+try {
+$etat = Read-JsonFichier $fEtat
+$recent = { param($c) try { [datetime]($c.Split('|')[0]) -gt $maintenant.AddDays(-2) } catch { $false } }
+$ok = [Collections.Generic.List[string]]@(@($etat.ok) | Where-Object { $_ -and (& $recent $_) })
+$montres = [Collections.Generic.List[string]]@(@($etat.montres) | Where-Object { $_ -and (& $recent $_) })
+$snooze = @{}
+if ($etat.snooze) { foreach ($p in $etat.snooze.PSObject.Properties) { if (& $recent $p.Name) { $snooze[$p.Name] = [string]$p.Value } } }
+if (Test-Path $fActions) {
+    foreach ($l in [IO.File]::ReadAllLines($fActions)) {
+        $c = $l.TrimStart([char]0xFEFF).Split("`t")
+        if ($c[0] -eq 'ok' -and $c.Count -ge 2) { $ok.Add($c[1]); $snooze.Remove($c[1]) }
+        elseif ($c[0] -eq 'snooze' -and $c.Count -ge 3) { $snooze[$c[1]] = $c[2] }
+    }
+    Remove-Item $fActions -Force
+}
+
+# Bulle d'alerte : $bulle min avant (jusqu'à 15 min après le début), puis à chaque fin de rappel.
+foreach ($e in $horaires) {
+    if ($e.cle -in $ok -or $maintenant -lt $e.debut.AddMinutes(-$bulle) -or $maintenant -gt $e.debut.AddMinutes(15)) { continue }
+    if ($e.cle -in $montres) {
+        if (-not $snooze.ContainsKey($e.cle)) { continue }   # bulle encore ouverte, ou fermée sans réponse
+        $jusqua = [datetime]::ParseExact($snooze[$e.cle], 'yyyyMMddHHmmss', $null)
+        if ($maintenant -lt $jusqua) { continue }
+        $snooze.Remove($e.cle)
+    }
+    if ($e.cle -notin $montres) { $montres.Add($e.cle) }
+    try { Start-Process -FilePath $ahk -ArgumentList 'alerte', "`"$($e.cle)`"" } catch {}
+    break
+}
+[IO.File]::WriteAllText($fEtat, (ConvertTo-Json @{ ok = @($ok); montres = @($montres); snooze = $snooze } -Compress), $utf8)
+} finally { try { $verrou.ReleaseMutex() } catch {} }
+
+# --- Sortie du widget ---
+function Get-Jour([datetime]$d) {
+    if ($d.Date -eq $maintenant.Date) { '' } elseif ($d.Date -eq $maintenant.Date.AddDays(1)) { 'demain ' } else { $d.ToString('ddd ') }
+}
+$suivant = $horaires | Where-Object { $_.debut -gt $maintenant.AddMinutes(-5) } | Select-Object -First 1
+if ($suivant -and ($suivant.debut - $maintenant).TotalMinutes -le $avance) {
+    $m = [math]::Ceiling(($suivant.debut - $maintenant).TotalMinutes)
+    $barre = "$icAlerte $(if ($m -gt 0) { "dans $m min" } else { 'maintenant' }) · $(Get-Court $suivant.sujet)"
+    $alt = $barre + $(if ($suivant.lieu) { " · $(Get-Court $suivant.lieu 30)" })
+} elseif ($suivant) {
+    $barre = "$icCal $(Get-Jour $suivant.debut)$($suivant.debut.ToString('HH:mm')) $(Get-Court $suivant.sujet)"
+    $alt = $barre + $(if ($suivant.lieu) { " · $(Get-Court $suivant.lieu 30)" })
+} else { $barre = $icVide; $alt = "$icVide rien à venir" }
+
+# Bulle d'aide (survol) : détail du prochain RDV.
+function Get-Duree([timespan]$t) {
+    $m = [int][math]::Ceiling($t.TotalMinutes)
+    if ($m -ge 60) { '{0} h {1:00}' -f [math]::Floor($m / 60), ($m % 60) } else { "$m min" }
+}
+$detail = @()
+if ($suivant) {
+    $jour = if ($suivant.debut.Date -eq $maintenant.Date) { "Aujourd'hui" } elseif ($suivant.debut.Date -eq $maintenant.Date.AddDays(1)) { 'Demain' } else { $suivant.debut.ToString('dddd d MMMM') }
+    $ecart = $suivant.debut - $maintenant
+    $quand = if ($ecart.TotalMinutes -gt 0) { "dans $(Get-Duree $ecart)" } else { "commencé depuis $(Get-Duree (-$ecart))" }
+    $detail += $suivant.sujet
+    $detail += "$jour $($suivant.debut.ToString('HH:mm'))–$($suivant.fin.ToString('HH:mm')) ($(Get-Duree ($suivant.fin - $suivant.debut)))  ·  $quand"
+    if ($suivant.lieu) { $detail += "Lieu : $($suivant.lieu)" }
+    if ($suivant.organisateur) { $detail += "Organisateur : $($suivant.organisateur)" }
+} else { $detail += "Aucun rendez-vous à venir" }
+# Seulement le RDV à venir ; une ligne de plus uniquement si Outlook n'a pas pu être lu.
+if ($erreur) { $detail += ''; $detail += "Outlook injoignable : $erreur" }
+
+[pscustomobject]@{ barre = $barre; alt = $alt; detail = $detail -join "`n" } | ConvertTo-Json -Compress
+'@
+    $ahk = Join-Path $Perso 'rdv-bulle.ahk'
+    Write-Utf8Bom $ahk @'
+#Requires AutoHotkey v2.0
+#SingleInstance Off
+#NoTrayIcon
+; Bulle des rendez-vous Outlook sous la barre YASB : écrit par setup-winarchy.ps1, ne pas modifier ici.
+;   rdv-bulle.ahk             RDV de la semaine en cours (clic droit sur le widget rdv ; reclic = fermer)
+;   rdv-bulle.ahk alerte CLE  alerte avant un RDV, sur tous les écrans (lancée par rdv.ps1) :
+;                             Rappel 5 min / Outlook / OK ; un clic sur l'une ferme toutes les bulles
+; Données : rdv-bulle.txt (écrit par rdv.ps1). Réponses : rdv-actions.txt (relu par rdv.ps1).
+
+Dossier := A_ScriptDir
+Mode := A_Args.Length ? A_Args[1] : "agenda"
+Cle := A_Args.Length > 1 ? A_Args[2] : ""
+Fond := "0c0a12", Texte := "eee2d8", Accent := "f25a00", Rouge := "e0435a", Gris := "9a8a94", Bouton := "2a1d26"
+L := 340
+Bulles := [], Bandes := [], Titres := []
+
+if Mode = "agenda" {
+    ; Reclic sur le widget : la bulle vient de se fermer (clic dehors) ou est encore ouverte.
+    if WinExist("RdvBulle agenda ahk_class AutoHotkeyGUI") {
+        WinClose
+        ExitApp
+    }
+    if FermeeRecemment()
+        ExitApp
+} else {
+    while WinExist("RdvBulle alerte ahk_class AutoHotkeyGUI") {
+        WinClose
+        Sleep 100
+    }
+}
+
+Evts := []
+try {
+    Loop Parse FileRead(Dossier "\rdv-bulle.txt", "UTF-8"), "`n", "`r" {
+        c := StrSplit(A_LoopField, "`t")
+        if c.Length >= 6
+            Evts.Push({cle: c[1], debut: c[2], fin: c[3], journee: c[4] = "1", sujet: c[5], lieu: c[6]})
+    }
+}
+
+if Mode = "alerte" {
+    E := ""
+    for x in Evts
+        if x.cle = Cle
+            E := x
+    if !IsObject(E)
+        ExitApp
+    Loop MonitorGetCount()
+        BulleAlerte(A_Index)
+    Clignements := 0
+    SetTimer(Clignoter, 600)
+    SetTimer(MajTitres, 10000)
+    SoundPlay "*48"
+} else {
+    BulleAgenda(EcranSouris())
+    SetTimer(ClicDehors, 50)   ; fermée dès qu'on clique ailleurs (la bulle n'a pas toujours le focus)
+}
+
+NouvelleBulle() {
+    g := Gui("+AlwaysOnTop -Caption +ToolWindow +Border", "RdvBulle " Mode)
+    g.BackColor := Fond
+    g.MarginX := 16, g.MarginY := 12
+    g.OnEvent("Close", (*) => ExitApp())
+    g.OnEvent("Escape", (*) => Mode = "alerte" ? Repondre("ok") : Fermer())
+    Bulles.Push(g)
+    return g
+}
+
+BulleAlerte(n) {
+    g := NouvelleBulle()
+    bande := g.AddText("x0 y0 w" (L + 32) " h6 Background" Rouge)
+    Bandes.Push(bande)
+    g.SetFont("s10 bold c" Rouge, "Segoe UI")
+    Titres.Push(g.AddText("xm y18 w" L, TexteTitre()))
+    g.SetFont("s14 bold c" Texte)
+    g.AddText("xm y+6 w" L, E.sujet)
+    g.SetFont("s10 norm c" Gris)
+    g.AddText("xm y+2 w" L, Heures(E) (E.lieu != "" ? "   ·   " E.lieu : ""))
+    w := (L - 16) // 3
+    AjouterBouton(g, "xm y+16 w" w, "Rappel 5 min", Bouton, () => Repondre("snooze"))
+    AjouterBouton(g, "x+8 yp w" w, "Outlook", Bouton, () => Repondre("outlook"))
+    AjouterBouton(g, "x+8 yp w" w, "OK", Rouge, () => Repondre("ok"))
+    Afficher(g, n, false, bande)
+}
+
+; Tous les RDV de la semaine en cours, lundi -> dimanche (passés en gris). Jours sans RDV omis, sauf aujourd'hui.
+BulleAgenda(n) {
+    g := NouvelleBulle()
+    lundi := DateAdd(A_Now, -Mod(A_WDay + 5, 7), "Days")   ; A_WDay : 1 = dimanche, 2 = lundi
+    g.SetFont("s11 bold c" Accent, "Segoe UI")
+    g.AddText("xm w" L, "Semaine du " FormatTime(lundi, "d MMMM") " au " FormatTime(DateAdd(lundi, 6, "Days"), "d MMMM"))
+    Loop 7 {
+        jour := DateAdd(lundi, A_Index - 1, "Days"), cle := FormatTime(jour, "yyyyMMdd")
+        rel := DateDiff(cle, FormatTime(A_Now, "yyyyMMdd"), "Days")
+        du := []
+        for e in Evts
+            ; (un RDV qui finit à minuit pile n'appartient pas au jour où il finit)
+            if SubStr(e.debut, 1, 8) <= cle && SubStr(e.fin, 1, 8) >= cle && !(SubStr(e.fin, 1, 8) = cle && SubStr(e.fin, 9) = "000000" && SubStr(e.debut, 1, 8) != cle)
+                du.Push(e)
+        if !du.Length && rel != 0
+            continue
+        nom := rel = 0 ? "Aujourd'hui · " : rel = 1 ? "Demain · " : ""
+        g.SetFont("s8 bold c" (rel = 0 ? Accent : Gris))
+        g.AddText("xm y+14 w" L, StrUpper(nom FormatTime(jour, "dddd d MMMM")))
+        for e in du
+            LigneRdv(g, e)
+        if !du.Length {
+            g.SetFont("s10 norm c" Gris)
+            g.AddText("xm y+6 w" L, "Aucun rendez-vous")
+        }
+    }
+    g.AddText("xm y+4 w1 h1")   ; marge du bas
+    Afficher(g, n, true)
+}
+
+; Une ligne : heures (orange ; rouge si en cours ou dans 15 min ; gris si passé), sujet, lieu.
+LigneRdv(g, e) {
+    passe := e.fin <= A_Now
+    proche := !passe && !e.journee && Minutes(e) <= 15
+    g.SetFont("s10 " (proche ? "bold" : "norm") " c" (passe ? Gris : proche ? Rouge : Accent))
+    g.AddText("xm y+6 w92", Heures(e))
+    g.SetFont("s10 " (proche ? "bold" : "norm") " c" (passe ? Gris : Texte))
+    g.AddText("x+4 yp w" (L - 96), e.sujet)
+    if e.lieu != "" && !passe {   ; lieu masqué pour les RDV passés (bulle moins haute)
+        g.SetFont("s9 norm c" Gris)
+        g.AddText("xp y+1 w" (L - 96), e.lieu)
+    }
+}
+
+Minutes(e) => Ceil(DateDiff(e.debut, A_Now, "Seconds") / 60)
+Heures(e) => e.journee ? "Journée" : FormatTime(e.debut, "HH:mm") "–" FormatTime(e.fin, "HH:mm")
+
+TexteTitre() {
+    m := Minutes(E)
+    q := m > 0 ? "DANS " m " MIN" : m = 0 ? "MAINTENANT" : "COMMENCÉ DEPUIS " (-m) " MIN"
+    return "⚠  RENDEZ-VOUS " q
+}
+
+MajTitres() {
+    for t in Titres
+        t.Text := TexteTitre()
+}
+
+Jour(d) {
+    if SubStr(d, 1, 8) = FormatTime(A_Now, "yyyyMMdd")
+        return "AUJOURD'HUI"
+    if SubStr(d, 1, 8) = FormatTime(DateAdd(A_Now, 1, "Days"), "yyyyMMdd")
+        return "DEMAIN"
+    return StrUpper(FormatTime(d, "dddd d MMMM"))
+}
+
+AjouterBouton(g, opts, libelle, couleur, action) {
+    g.SetFont("s10 bold c" Texte)
+    b := g.AddText(opts " h30 Center 0x200 Background" couleur, libelle)   ; 0x200 = centré verticalement
+    b.OnEvent("Click", (*) => action())
+}
+
+; Bandeau et titre qui clignotent jusqu'à la réponse.
+Clignoter() {
+    global Clignements
+    Clignements += 1
+    allume := Mod(Clignements, 2)
+    for b in Bandes {
+        b.Opt("Background" (allume ? Fond : Rouge))
+        b.Redraw()
+    }
+    for t in Titres
+        t.SetFont("c" (allume ? Texte : Rouge))
+}
+
+Repondre(quoi) {
+    ligne := quoi = "snooze" ? "snooze`t" Cle "`t" DateAdd(A_Now, 5, "Minutes") : "ok`t" Cle
+    FileAppend(ligne "`n", Dossier "\rdv-actions.txt", "UTF-8-RAW")
+    if quoi = "outlook"
+        OuvrirOutlook()
+    ExitApp
+}
+
+OuvrirOutlook() {
+    try Run("outlook.exe /select outlook:calendar")
+}
+
+ClicDehors() {
+    static avant := true   ; bouton déjà enfoncé à l'ouverture : le clic qui a ouvert la bulle
+    bas := GetKeyState("LButton", "P") || GetKeyState("RButton", "P")
+    if bas && !avant {
+        CoordMode "Mouse", "Screen"
+        MouseGetPos , , &sous
+        if sous != Bulles[1].Hwnd
+            Fermer()
+    }
+    avant := bas
+}
+
+Fermer() {
+    if Mode = "agenda" {
+        f := Dossier "\rdv-bulle.ferme"
+        try FileDelete(f)
+        try FileAppend(DllCall("GetTickCount64", "Int64"), f)
+    }
+    ExitApp
+}
+
+FermeeRecemment() {
+    try return DllCall("GetTickCount64", "Int64") - Integer(FileRead(Dossier "\rdv-bulle.ferme")) < 1500
+    return false
+}
+
+EcranSouris() {
+    CoordMode "Mouse", "Screen"
+    MouseGetPos &mx, &my
+    Loop MonitorGetCount() {
+        MonitorGet(A_Index, &l, &t, &r, &b)
+        if mx >= l && mx < r && my >= t && my < b
+            return A_Index
+    }
+    return MonitorGetPrimary()
+}
+
+; Sous la barre, centrée sur l'écran n (zone de travail = sous l'AppBar YASB).
+Afficher(g, n, activer, bande := "") {
+    MonitorGetWorkArea(n, &l, &t, &r, &b)
+    g.Show("Hide AutoSize")
+    if bande {   ; bandeau rouge sur toute la largeur réelle
+        g.GetClientPos(, , &cw)
+        bande.Move(0, 0, cw)
+    }
+    ; Windows 11 : coins arrondis et bordure couleur (rouge pour l'alerte).
+    DllCall("dwmapi\DwmSetWindowAttribute", "Ptr", g.Hwnd, "UInt", 33, "Int*", 2, "UInt", 4)
+    DllCall("dwmapi\DwmSetWindowAttribute", "Ptr", g.Hwnd, "UInt", 34, "UInt*", Bgr(Mode = "alerte" ? Rouge : "55404c"), "UInt", 4)
+    g.GetPos(, , &w)
+    g.Show("x" (l + (r - l - w) // 2) " y" (t + 6) (activer ? "" : " NoActivate"))
+}
+
+Bgr(hex) {
+    v := Integer("0x" hex)
+    return ((v & 0xFF) << 16) | (v & 0xFF00) | ((v >> 16) & 0xFF)
+}
+'@
+    # Restes de l'ancienne version (widget d'alerte séparé).
+    Remove-Item (Join-Path $Perso 'rdv-alerte.txt') -Force -ErrorAction SilentlyContinue
+    Ok "Rendez-vous Outlook (barre YASB) : $ps1, $ahk"
 }
 
 # Widgets perf (GPU / CPU / RAM) de la barre YASB : les natifs n'ont pas de bulle au survol.
@@ -733,6 +1259,37 @@ function Set-ToucheOffice([bool]$desactivee) {
     }
 }
 
+# Raccourcis Super de Windows : seuls ceux de Winarchy restent. Les combinaisons Super+lettre
+# ou chiffre que Winarchy ne prend pas n'ouvrent plus rien (DisabledHotkeys, sauf T, que
+# devant.ahk envoie pour les demandes UAC ; Super+Tab reste pour l'Exposé). « Actions par
+# clic » (Super+clic, l'IA qui s'ouvrait à la place de Flow) et Copilot sont coupés par
+# stratégie. Super+L (verrouiller) reste géré par Windows.
+function Set-RaccourcisWindows([bool]$desactives) {
+    $adv = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced'
+    $strategies = @(
+        @{ Cle = 'HKCU:\Software\Policies\Microsoft\Windows\WindowsAI'; Nom = 'DisableClickToDo' },
+        @{ Cle = 'HKCU:\Software\Policies\Microsoft\Windows\WindowsCopilot'; Nom = 'TurnOffWindowsCopilot' }
+    )
+    if ($desactives) {
+        $touches = (@([char[]]'ABCDEFGHIJKLMNOPQRSUVWXYZ0123456789') -join '')
+        Set-ItemProperty $adv -Name DisabledHotkeys -Value $touches -Type String
+        Ok 'Raccourcis Super de Windows désactivés (hors Winarchy, Super+Tab, Super+T, Super+L)'
+        try {
+            foreach ($s in $strategies) {
+                New-Item $s.Cle -Force -ErrorAction Stop | Out-Null
+                Set-ItemProperty $s.Cle -Name $s.Nom -Value 1 -Type DWord -ErrorAction Stop
+            }
+            Ok 'Actions par clic (Super+clic) et Copilot désactivés'
+        } catch {
+            Write-Warning 'Actions par clic / Copilot : relance le setup en administrateur pour les désactiver'
+        }
+    } else {
+        Remove-ItemProperty $adv -Name DisabledHotkeys -ErrorAction SilentlyContinue
+        foreach ($s in $strategies) { Remove-ItemProperty $s.Cle -Name $s.Nom -ErrorAction SilentlyContinue }
+        Ok 'Raccourcis Super de Windows rétablis'
+    }
+}
+
 function Find-WinarchyKomorebi {
     $racines = @()
     $cmd = Get-Command winarchy -ErrorAction SilentlyContinue
@@ -870,6 +1427,7 @@ function Install-Raccourcis([string]$Root) {
         Restart-WinarchyAhk $MainAhk $ahkExe
         Set-Survol $false
         Set-ToucheOffice $false
+        Set-RaccourcisWindows $false
         Set-KomorebiAdmin $false
         if (Test-Path $Perso) { Remove-Item $Perso -Recurse -Force; Ok "Supprimé : $Perso" }
         return
@@ -882,7 +1440,7 @@ function Install-Raccourcis([string]$Root) {
     Write-PressePapiersLauncher
     Write-LanceurAppsLauncher
     Write-DisquesScript
-    Write-PerfScript
+    Write-RdvScript
     Write-ReseauScript
     Write-DevantScript
     Test-ClaudeDesktop
@@ -896,24 +1454,27 @@ function Install-Raccourcis([string]$Root) {
 InstallMouseHook()
 #HotIf true
 ; --- Perso : applis -----------------------------------------------------------
-#Backspace::PersoClaude('foxis')                  ; Claude Code (Foxis)
-#+Backspace::PersoClaude('perso')                 ; Claude Code (perso)
-#^+Backspace::PersoClaudeBascule()                ; Claude Desktop : ouvre / affiche / replie
-#^!+Backspace::PersoClaudeBascule()               ; Claude Desktop (même chose, avec Alt)
+#Backspace::PersoIci(), PersoClaude('foxis')                  ; Claude Code (Foxis)
+#+Backspace::PersoIci(), PersoClaudeBascule()                 ; Claude Desktop : ouvre / affiche / replie
 #+a::return                                       ; Supprimé (webapp claude.ai de Winarchy)
-#^!+Enter::PersoClaudePerso()                     ; Claude Desktop perso (2e instance, compte perso)
+#^!+Enter::PersoIci(), PersoClaudePerso()                     ; Claude Desktop perso (2e instance, compte perso)
 #a::PersoExpose()                                 ; Exposé (Vue des tâches)
 #!Tab::PersoExpose()                              ; Exposé (Vue des tâches)
-#o::PersoOutlook()                                ; Outlook (remplace Obsidian de Winarchy)
+#o::PersoIci(), PersoOutlook()                                ; Outlook (remplace Obsidian de Winarchy)
 #+o::return                                       ; Supprimé (Outlook est passé sur Super+O)
-#m::PersoDeezer()                                 ; Deezer (remplace la musique de Winarchy)
+#m::PersoLanceIci(PersoDeezer)                                ; Deezer, sur l'écran de la souris (remplace la musique de Winarchy)
 #y::return                                        ; Supprimés : applis web de Winarchy
 #x::return                                        ;   (YouTube, X, Google Calendar, WhatsApp)
 #c::return
 #g::return
-#+n::Run('notepad.exe')                           ; Bloc-notes
-#r::Run('explorer.exe shell:::{2559a1f3-21d7-11d4-bdaf-00c04f60b9f0}')   ; Exécuter
-#i::Run('ms-settings:')                           ; Paramètres Windows
+#n::GetKeyState('LWin','P') || GetKeyState('RWin','P') ? PersoLanceIci(() => Run('notepad.exe')) : Send('#n')   ; Bloc-notes (Super+N) ; Win+N simulé (cloche YASB) → centre de notifications
+#+n::Send('{Blind}{Shift up}n')                   ; Centre de notifications : Windows reçoit Win+N
+#r::PersoIci(), Run('explorer.exe shell:::{2559a1f3-21d7-11d4-bdaf-00c04f60b9f0}')   ; Exécuter
+#i::PersoIci(), Run('ms-settings:')               ; Paramètres Windows
+; Raccourcis de Winarchy repris pour s'ouvrir sur l'écran de la souris (PersoIci).
+#Enter::Wezterm('start --position ' PersoCoinSouris())   ; Terminal
+#b::PersoIci(), Run(DefaultBrowser())   ; Navigateur
+#e::PersoLanceIci(() => Run('explorer.exe'))     ; Explorateur, sur l'écran de la souris
 #Space::PersoDemarrer()                           ; Menu Démarrer + barre des tâches Windows entière
 #q::ShowMainMenu()                                ; Menu Winarchy
 ; Super seul = lanceur d'applis (Flow, l'ancien Super+Espace) au lieu du menu Démarrer.
@@ -926,6 +1487,10 @@ LWin up::PersoSuper(false)
 #^!Up::PersoVersEcran('up')
 #^!Right::PersoVersEcran('right')
 #^!Down::PersoVersEcran('down')
+#^Left::PersoVersEcran('left')                    ; Fenêtre vers l'écran voisin (Super+Ctrl+flèche, remplace le changement de bureau virtuel)
+#^Up::PersoVersEcran('up')
+#^Right::PersoVersEcran('right')
+#^Down::PersoVersEcran('down')
 #!1::PersoEcran(1, 'focus')                       ; Aller sur l'écran N (numérotés de gauche à droite)
 #!2::PersoEcran(2, 'focus')
 #!3::PersoEcran(3, 'focus')
@@ -947,6 +1512,8 @@ LWin up::PersoSuper(false)
 #s::PersoCache()                                  ; Réduire la fenêtre active
 #+s::PersoRameneTout()                            ; Ramener toutes les fenêtres réduites
 #p::Run('ms-settings-displays-topology:projection')   ; Projeter (menu Windows)
+#+w::PersoScreenpresso()                          ; Capture Screenpresso (remplace ShareX fenêtre active)
+#+p::PersoScreenpresso()                          ; Capture Screenpresso (remplace ShareX plein écran)
 #HotIf PersoResizeOn()
 Left::PersoResizePas('horizontal', 'decrease', 100)
 h::PersoResizePas('horizontal', 'decrease', 100)
@@ -973,15 +1540,263 @@ PersoSuper(bas) {
     SetKeyDelay(-1, -1)
     if bas {
         Send('{Blind}{vkE8}')          ; masque Super seul : Windows n'ouvre pas Démarrer
-        if !depuis
+        if !depuis {
             depuis := A_TickCount
+            PersoSuivreSouris()
+        }
         return
     }
     Send('{Blind}{vkE8}{LWin up}')
     seul := (A_PriorKey = 'LWin' && A_TickCount - depuis < 500)
     depuis := 0
     if seul
-        ToggleFlow()
+        PersoIci(), PersoFlowDereduit(), ToggleFlow()
+}
+
+; Flow réduit (Super+S, Win+D…) : Alt+Espace ne l'affichait plus qu'en petite barre en bas
+; à gauche. On le restaure et on le recache avant de l'ouvrir.
+PersoFlowDereduit() {
+    DetectHiddenWindows(true)
+    try {
+        h := WinExist('Flow.Launcher ahk_exe Flow.Launcher.exe')
+        if h && WinGetMinMax(h) = -1 {
+            WinRestore(h)
+            WinHide(h)
+        }
+    }
+    DetectHiddenWindows(false)
+}
+
+; Nouvelle fenêtre sur l'écran de la souris : komorebi range une fenêtre qui s'ouvre sur
+; l'écran qu'il a en focus, qui n'est pas celui de la souris quand elle est sur un écran
+; vide, la barre ou le bureau. On lui donne l'écran du curseur avant de lancer. Les
+; fenêtres flottantes (Gestionnaire des tâches…) sont ramenées par devant.ahk.
+PersoIci() {
+    try PersoKomorebic('focus-monitor-at-cursor')
+}
+
+; Écran (HMONITOR) sous le curseur.
+PersoEcranSouris() {
+    CoordMode('Mouse', 'Screen')
+    MouseGetPos(&x, &y)
+    return DllCall('user32\MonitorFromPoint', 'Int64', (y << 32) | (x & 0xFFFFFFFF), 'UInt', 2, 'Ptr')
+}
+
+; « x,y » près du coin haut-gauche de la zone de travail de l'écran de la souris. Pour les
+; terminaux qui acceptent une position au lancement (WezTerm --position, Windows Terminal
+; --pos) : ils s'ouvrent directement sur cet écran. Les autres applis rouvrent à la place de
+; leur dernière fenêtre, sans option équivalente.
+PersoCoinSouris() {
+    mi := Buffer(40, 0), NumPut('UInt', 40, mi, 0)
+    DllCall('user32\GetMonitorInfoW', 'Ptr', PersoEcranSouris(), 'Ptr', mi)
+    return (NumGet(mi, 20, 'Int') + 60) ',' (NumGet(mi, 24, 'Int') + 60)
+}
+
+; Super appuyé : si la souris est sur un autre écran que la fenêtre active, komorebi passe
+; sur l'écran de la souris avant la touche suivante. Tous les raccourcis Super (tiling,
+; bureaux, applis, y compris ceux de winarchy.ahk) agissent alors sur cet écran.
+PersoSuivreSouris() {
+    global KomorebicExe
+    souris := PersoEcranSouris()
+    actif := WinExist('A')
+    if actif && DllCall('user32\MonitorFromWindow', 'Ptr', actif, 'UInt', 2, 'Ptr') = souris
+        return
+    try Run('"' KomorebicExe '" focus-monitor-at-cursor', , 'Hide')
+}
+
+; Super+E (Explorateur) et Super+N (Bloc-notes) : ces applis rouvrent là où était leur
+; dernière fenêtre, et komorebi les range sur cet écran-là (en < 20 ms, bordure comprise).
+; Pendant 20 s après le raccourci, un crochet Windows guette les nouvelles fenêtres (dès la
+; première traitée, seulement celles du même programme) :
+; - création (pas encore affichée) : la fenêtre est rendue invisible. komorebi ignore les
+;   fenêtres transparentes (« layered ») : il ne la range donc pas à l'affichage ;
+; - affichage : invisible, elle est posée sur l'écran de la souris (même position relative),
+;   cachée, rendue opaque puis réaffichée : komorebi la range là, normalement.
+; Testé : rien de visible sur le mauvais écran. Pas pour Outlook (il gère lui-même la
+; transparence de sa fenêtre) ni les terminaux (option de position, voir PersoCoinSouris).
+PersoLanceIci(lancer) {
+    ecran := PersoEcranSouris()                    ; (le focus komorebi suit déjà : PersoSuivreSouris)
+    PersoGuette(ecran, 20000)
+    lancer()
+}
+
+PersoGuette(ecran, duree) {
+    global PersoGuet
+    static cb := CallbackCreate(PersoGuetEvt, 'F', 7)
+    PersoGuetFin()
+    avant := Map()
+    dhw := DetectHiddenWindows(true)
+    for h in WinGetList()
+        avant[h] := true
+    DetectHiddenWindows(dhw)
+    ; EVENT_OBJECT_CREATE (0x8000) .. EVENT_OBJECT_SHOW (0x8002), hors contexte
+    hook := DllCall('SetWinEventHook', 'UInt', 0x8000, 'UInt', 0x8002, 'Ptr', 0, 'Ptr', cb
+        , 'UInt', 0, 'UInt', 0, 'UInt', 0, 'Ptr')
+    PersoGuet := {ecran: ecran, avant: avant, hook: hook, caches: Map(), exe: ''}
+    SetTimer(PersoGuetFin, -duree)
+}
+
+; Fin du guet : crochet retiré ; les fenêtres masquées à la création mais jamais affichées
+; retrouvent leur opacité.
+PersoGuetFin(*) {
+    global PersoGuet
+    SetTimer(PersoGuetFin, 0)
+    if !IsSet(PersoGuet) || !PersoGuet
+        return
+    g := PersoGuet, PersoGuet := 0
+    if g.hook
+        DllCall('UnhookWinEvent', 'Ptr', g.hook)
+    for h in g.caches
+        try WinSetTransparent('Off', h)
+}
+
+; Fenêtre principale ou boîte de dialogue d'une appli : ni enfant, ni outil, ni déjà
+; « layered » (on ne touche pas à son alpha), avec un cadre ; pas komorebi ni la barre.
+PersoGuetCandidate(hwnd) {
+    if DllCall('user32\GetAncestor', 'Ptr', hwnd, 'UInt', 2, 'Ptr') != hwnd
+        return false
+    st := WinGetStyle(hwnd), ex := WinGetExStyle(hwnd)
+    if (st & 0x40000000) || (ex & 0x80) || (ex & 0x80000) || !(st & 0xC40000)
+        return false
+    return !PersoIgnoree(hwnd) && WinGetProcessName(hwnd) != 'komorebi.exe'
+}
+
+PersoGuetEvt(hHook, evt, hwnd, idObj, idChild, thread, temps) {
+    global PersoGuet
+    if (idObj != 0 || !IsSet(PersoGuet) || !PersoGuet)
+        return
+    g := PersoGuet
+    dhw := DetectHiddenWindows(true)               ; à la création, la fenêtre est encore cachée
+    try {
+        if g.avant.Has(hwnd)
+            return
+        if (g.exe != '') && (evt != 0x8001) && (WinGetProcessName(hwnd) != g.exe)
+            return                                 ; autre programme que celui lancé
+        if (evt = 0x8000) {                        ; création
+            if PersoGuetCandidate(hwnd) {
+                ; noté AVANT de masquer : WinSetTransparent peut laisser passer l'évènement
+                ; d'affichage pendant qu'on est encore ici (rappel réentrant).
+                g.caches[hwnd] := true
+                WinSetTransparent(0, hwnd)
+            }
+            return
+        }
+        if (evt = 0x8001) {                        ; destruction
+            g.caches.Delete(hwnd)
+            return
+        }
+        masquee := g.caches.Has(hwnd)              ; affichage
+        if !masquee && !PersoGuetCandidate(hwnd)
+            return
+    } catch {
+        return
+    } finally {
+        DetectHiddenWindows(dhw)
+    }
+    ; traitée une seule fois (PersoGuetPose la réaffiche : nouvel évènement d'affichage)
+    g.avant[hwnd] := true, g.caches.Delete(hwnd)
+    if (g.exe = '')
+        try g.exe := WinGetProcessName(hwnd)
+    bon := DllCall('user32\MonitorFromWindow', 'Ptr', hwnd, 'UInt', 2, 'Ptr') = g.ecran
+    ; (traitements lancés par minuteur : hors du rappel du crochet)
+    if bon {
+        if masquee                                 ; bon écran : réaffichée pour que komorebi la range
+            SetTimer(PersoGuetPose.Bind(hwnd, g.ecran, true), -1)
+        return                                     ; non masquée : rien à faire (navigateur…)
+    }
+    if !masquee
+        try WinSetTransparent(0, hwnd)
+    ; mauvais écran : si komorebi l'a déjà rangée (le masquage a traîné), c'est lui qui la
+    ; déplace ; sinon elle est posée à la main (PersoGuetPose).
+    SetTimer(PersoGuetDeplace.Bind(hwnd, g.ecran), -1)
+}
+
+; Zone de travail d'un écran (HMONITOR).
+PersoZone(hmon) {
+    mi := Buffer(40, 0), NumPut('UInt', 40, mi, 0)
+    DllCall('user32\GetMonitorInfoW', 'Ptr', hmon, 'Ptr', mi)
+    return {l: NumGet(mi, 20, 'Int'), t: NumGet(mi, 24, 'Int'), r: NumGet(mi, 28, 'Int'), b: NumGet(mi, 32, 'Int')}
+}
+
+; Fenêtre masquée que komorebi n'a pas rangée (il ignore les fenêtres transparentes) :
+; posée sur l'écran voulu (même position relative), cachée, rendue opaque puis réaffichée.
+; Ce nouvel affichage, opaque et déjà sur le bon écran, komorebi le traite normalement
+; (rangée en tuile ou laissée flottante selon ses règles).
+PersoGuetPose(hwnd, ecran, bon) {
+    SetWinDelay(-1)
+    try {
+        if !bon {
+            zs := PersoZone(DllCall('user32\MonitorFromWindow', 'Ptr', hwnd, 'UInt', 2, 'Ptr')), zd := PersoZone(ecran)
+            WinGetPos(&x, &y, &w, &h, hwnd)
+            w := Min(w, zd.r - zd.l), h := Min(h, zd.b - zd.t)
+            x := Max(zd.l, Min(zd.l + x - zs.l, zd.r - w)), y := Max(zd.t, Min(zd.t + y - zs.t, zd.b - h))
+            WinMove(x, y, w, h, hwnd)
+        }
+        DllCall('user32\ShowWindow', 'Ptr', hwnd, 'Int', 0)    ; SW_HIDE
+        WinSetTransparent('Off', hwnd)
+        DllCall('user32\ShowWindow', 'Ptr', hwnd, 'Int', 5)    ; SW_SHOW
+    }
+    try WinSetTransparent('Off', hwnd)
+    try WinActivate(hwnd)
+}
+
+; Fenêtre masquée sur le mauvais écran. Rangée par komorebi (masquage arrivé trop tard) :
+; komorebi la déplace (move-to-monitor) ; sinon : PersoGuetPose.
+PersoGuetDeplace(hwnd, ecran) {
+    global KomorebicExe
+    SetWinDelay(-1)
+    idx := PersoIdxKomorebi(ecran)
+    try {
+        tmp := A_Temp '\winarchy-perso-guet.json'
+        RunWait(A_ComSpec ' /c ""' KomorebicExe '" state > "' tmp '""', , 'Hide')
+        etat := FileRead(tmp)
+        if (idx >= 0) && (InStr(etat, '"hwnd": ' hwnd ',') || InStr(etat, '"hwnd":' hwnd ',')) {
+            WinActivate(hwnd)
+            Sleep(40)                              ; komorebi enregistre le focus
+            PersoKomorebic('move-to-monitor ' idx)
+            fin := A_TickCount + 500
+            while (DllCall('user32\MonitorFromWindow', 'Ptr', hwnd, 'UInt', 2, 'Ptr') != ecran && A_TickCount < fin)
+                Sleep(15)
+            Sleep(60)                              ; fin de l'animation de komorebi
+            WinSetTransparent('Off', hwnd)
+            return
+        }
+    }
+    PersoGuetPose(hwnd, ecran, false)              ; komorebi ne la gère pas : à la main
+}
+
+; Index komorebi d'un écran (HMONITOR), gardé en cache : relire l'état complet de komorebi
+; prend plusieurs centaines de ms. Le cache est vidé quand la configuration des écrans change.
+PersoIdxKomorebi(hmon) {
+    static cache := Map()
+    static ecoute := OnMessage(0x7E, Vider)       ; WM_DISPLAYCHANGE
+    Vider(*) {
+        cache.Clear()
+    }
+    nom := PersoNomEcran(hmon)                     ; « \\.\DISPLAY2 » ; komorebi dit « DISPLAY2 »
+    if !cache.Has(nom) {
+        cache.Clear()
+        try {
+            els := PersoEtat().monitors.elements
+            Loop els.length {
+                i := A_Index - 1
+                cache['\\.\' els.%i%.name] := i
+            }
+        }
+    }
+    return cache.Has(nom) ? cache[nom] : -1
+}
+
+; Envoie la fenêtre sur l'écran hmon s'il n'y est pas (move-to-monitor : la fenêtre et
+; le focus suivent).
+PersoEnvoieSurEcran(hwnd, ecran) {
+    if !WinExist(hwnd) || (DllCall('user32\MonitorFromWindow', 'Ptr', hwnd, 'UInt', 2, 'Ptr') = ecran)
+        return
+    idx := PersoIdxKomorebi(ecran)
+    if (idx < 0)
+        return
+    try WinActivate(hwnd)
+    PersoKomorebic('move-to-monitor ' idx)
 }
 
 ; La barre des tâches est cachée par devant.ahk : on la réaffiche, puis Démarrer. Elle reste
@@ -989,14 +1804,36 @@ PersoSuper(bas) {
 PersoDemarrer() {
     dhw := A_DetectHiddenWindows
     DetectHiddenWindows(true)
+    ; Repère dans %TEMP% : devant.ahk ne recache pas la barre pendant l'ouverture, et le
+    ; gardien ne remet pas le focus au survol ; devant.ahk l'efface quand Démarrer se ferme.
+    reprise := A_Temp '\winarchy-perso-komorebi-pause'
+    if !FileExist(reprise) {
+        try FileAppend('', reprise)
+    } else {
+        try FileSetTime(, reprise, 'M')
+    }
+    ; Focus au survol coupé aussi : la fenêtre sous la souris reprendrait le focus et
+    ; refermerait Démarrer. devant.ahk le remet avec komorebi.
+    DllCall('SystemParametersInfo', 'UInt', 0x1001, 'UInt', 0, 'Ptr', 0, 'UInt', 0)   ; SET ACTIVEWINDOWTRACKING
+    barres := []
     for classe in ['Shell_TrayWnd', 'Shell_SecondaryTrayWnd']
         for h in WinGetList('ahk_class ' classe)
-            try WinShow(h)
-    ; Masquage automatique coupé, sinon la barre reste glissée hors de l'écran ;
-    ; devant.ahk le remet quand Démarrer et la barre perdent le focus.
-    PersoMasquageAuto(false)
-    DetectHiddenWindows(dhw)
+            barres.Push(h), WinShow(h)
+    ; Masquage automatique GARDÉ : le couper réserve la place de la barre, la zone de travail
+    ; change et komorebi redimensionne toutes les fenêtres (deux fois, à l'aller et au
+    ; retour), ce qui volait aussi le focus à Démarrer. En masquage auto, Windows sort la
+    ; barre par-dessus les fenêtres à l'ouverture de Démarrer.
+    PersoMasquageAuto(true)
     Send('^{Esc}')
+    ; devant.ahk recache la barre tous les 250 ms tant que Démarrer n'a pas le focus : s'il
+    ; passe juste avant l'ouverture, on la réaffiche.
+    Loop 20 {
+        Sleep(50)
+        for h in barres
+            if !DllCall('IsWindowVisible', 'Ptr', h)
+                try WinShow(h)
+    }
+    DetectHiddenWindows(dhw)
 }
 ; ABM_SETSTATE : ABS_AUTOHIDE (1) ou ABS_ALWAYSONTOP (2) pour toutes les barres des tâches.
 PersoMasquageAuto(actif) {
@@ -1084,10 +1921,10 @@ PersoVersEcran(dir) {
     }
 }
 
-; Barres, bureau et YASB : jamais déplacés ni réduits.
+; Barres, bureau, YASB et Flow : jamais déplacés ni réduits.
 PersoIgnoree(h) {
     return WinGetClass('ahk_id ' h) ~= '^(Progman|WorkerW|Shell_TrayWnd|Shell_SecondaryTrayWnd)$'
-        || WinGetProcessName('ahk_id ' h) = 'yasb.exe'
+        || WinGetProcessName('ahk_id ' h) ~= 'i)^(yasb|Flow\.Launcher)\.exe$'
 }
 
 ; Super+F : une seule fenêtre en tuile -> bascule centrée / pleine largeur (bureau actif) ;
@@ -1338,6 +2175,13 @@ PersoNettoie(liste) {
     }
 }
 
+; Capture via Screenpresso (même lanceur que le bouton de la barre). On attend que Win et Maj
+; soient relâchées : sinon Impr. écran partirait en Win+Impr. écran (capture Windows).
+PersoScreenpresso() {
+    KeyWait('LWin'), KeyWait('RWin'), KeyWait('Shift')
+    Run('"' A_AhkPath '" "' EnvGet('USERPROFILE') '\.winarchy-perso\screenpresso-capture.ahk"')
+}
+
 PersoCache() {
     liste := PersoCachees()
     PersoNettoie(liste)
@@ -1386,7 +2230,7 @@ PersoExpose() {
 
 PersoClaude(profil) {
     h := EnvGet('USERPROFILE')
-    Run('wt.exe -d "' h '\Work" __SHELL__ -NoExit -NoLogo -ExecutionPolicy Bypass -File "' h '\.winarchy-perso\claude.ps1" ' profil)
+    Run('wt.exe --pos ' PersoCoinSouris() ' -d "' h '\Work" __SHELL__ -NoExit -NoLogo -ExecutionPolicy Bypass -File "' h '\.winarchy-perso\claude.ps1" ' profil)
 }
 
 ; Claude Desktop perso : 2e instance avec son propre dossier de données (--user-data-dir),
@@ -1421,7 +2265,7 @@ PersoClaudeOuvre(hwnd, lancer) {
         Run(lancer)
 }
 
-; Super+Ctrl+Shift+Backspace (ou + Alt) : instance pro (l'instance perso est ignorée).
+; Super+Shift+Backspace : instance pro (l'instance perso est ignorée).
 PersoClaudeBascule() => PersoClaudeOuvre(PersoClaudeFenetre(false), 'explorer.exe shell:AppsFolder\Claude_pzs8sxrjxfjjc!Claude')
 
 ; Super+Ctrl+Alt+Shift+Entrée : instance perso.
@@ -1440,8 +2284,12 @@ PersoOutlook() {
 PersoDeezer() {
     if WinExist('ahk_exe Deezer.exe')
         return WinActivate()
+    ; Appli « Deezer Music » du Microsoft Store, sinon l'ancienne version de bureau, sinon le site.
+    store := 'Deezer.62021768415AF_q7m17pa7q8kj0'
     exe := EnvGet('LOCALAPPDATA') '\Programs\deezer-desktop\Deezer.exe'
-    if FileExist(exe)
+    if DirExist(EnvGet('LOCALAPPDATA') '\Packages\' store)
+        Run('explorer.exe shell:AppsFolder\' store '!Deezer.Music')
+    else if FileExist(exe)
         Run('"' exe '"')
     else
         Run('https://www.deezer.com/')
@@ -1452,6 +2300,37 @@ PersoDeezer() {
 ; renvoient pas toujours leur icône (Ditto, Discord, OpenVPN, iCloud...). À chaque
 ; nouveau processus yasb.exe, on rediffuse « TaskbarCreated » : chaque appli recrée
 ; alors son icône, comme après un redémarrage de l'Explorateur.
+; Screenpresso 2.2.9 (version couverte par la licence) propose sans cesse la 2.4.x, sans
+; bouton « ignorer » et malgré CheckForUpdate=false : on masque la fenêtre dès qu'elle apparaît (la fermer quitte Screenpresso).
+SetTimer(PersoMasqueMajScreenpresso, 2000)
+PersoMasqueMajScreenpresso() {
+    if WinExist('Nouvelle version de Screenpresso ahk_exe Screenpresso.exe')
+        WinHide()
+}
+; Rappels Outlook (« N rappel(s) », toujours au premier plan) : Outlook la rouvre collée
+; en haut de l'écran, par-dessus la barre YASB. À chaque nouvelle fenêtre on la centre dans
+; la zone de travail de son écran, puis on la redescend si elle remonte sous la barre.
+SetTimer(PersoPlaceRappels, 500)
+PersoPlaceRappels() {
+    static vues := Map()
+    for h in WinGetList('rappel(s) ahk_class #32770 ahk_exe OUTLOOK.EXE') {
+        try {
+            WinGetPos(&x, &y, &w, &hh, h)
+            hmon := DllCall('user32\MonitorFromWindow', 'Ptr', h, 'UInt', 2, 'Ptr')
+            mi := Buffer(40, 0), NumPut('UInt', 40, mi, 0)
+            DllCall('user32\GetMonitorInfoW', 'Ptr', hmon, 'Ptr', mi)
+            l := NumGet(mi, 20, 'Int'), t := NumGet(mi, 24, 'Int'), r := NumGet(mi, 28, 'Int'), b := NumGet(mi, 32, 'Int')
+            if !vues.Has(h)
+                WinMove(l + (r - l - w) // 2, t + (b - t - hh) // 2, , , h)
+            else if (y < t && !GetKeyState('LButton', 'P'))
+                WinMove(, t, , , h)
+            vues[h] := A_TickCount
+        }
+    }
+    for h, tick in vues.Clone()
+        if !WinExist(h)
+            vues.Delete(h)
+}
 SetTimer(PersoSurveilleYasb, 3000)
 PersoSurveilleYasb() {
     static dernier := 0
@@ -1461,9 +2340,46 @@ PersoSurveilleYasb() {
     dernier := pid
 }
 PersoRediffuseTray() {
+    ; Fenêtre par fenêtre, sauf YASB : sur « TaskbarCreated », YASB croit l'Explorateur
+    ; redémarré et réenregistre ses AppBars, ce qui fait perdre la réservation du haut
+    ; de l'écran (komorebi tuilait alors sous la barre).
     msg := DllCall('RegisterWindowMessage', 'Str', 'TaskbarCreated', 'UInt')
-    DllCall('SendMessageTimeout', 'Ptr', 0xFFFF, 'UInt', msg, 'Ptr', 0, 'Ptr', 0
-        , 'UInt', 2, 'UInt', 3000, 'Ptr*', 0)     ; HWND_BROADCAST, SMTO_ABORTIFHUNG
+    yasb := ProcessExist('yasb.exe')
+    dhw := DetectHiddenWindows(true)
+    for h in WinGetList() {
+        pid := 0
+        try pid := WinGetPID(h)
+        if (pid && pid = yasb)
+            continue
+        DllCall('SendNotifyMessage', 'Ptr', h, 'UInt', msg, 'Ptr', 0, 'Ptr', 0)
+    }
+    DetectHiddenWindows(dhw)
+}
+
+; --- Super+glisser vers un autre écran ------------------------------------------
+; Le WindowDrag de Winarchy ne sait qu'échanger avec la tuile visée (un seul « move »
+; gauche/droite) et remet la fenêtre en place si on la lâche sur un écran vide : on ne
+; pouvait pas changer d'écran à la souris. Après son glisser, si le curseur est sur un
+; autre écran que la fenêtre, on l'y envoie (move-to-monitor : la fenêtre et le focus
+; suivent).
+Hotkey('#LButton', PersoGlisserFenetre)
+PersoGlisserFenetre(*) {
+    CoordMode('Mouse', 'Screen')
+    MouseGetPos(, , &sous)
+    hwnd := DllCall('user32\GetAncestor', 'Ptr', sous, 'UInt', 2, 'Ptr')
+    WindowDrag(true)
+    if !hwnd || !WinExist(hwnd)
+        return
+    MouseGetPos(&x, &y)
+    ecran := DllCall('user32\MonitorFromPoint', 'Int64', (y << 32) | (x & 0xFFFFFFFF), 'UInt', 2, 'Ptr')
+    Sleep(150)                                   ; laisse komorebi finir un éventuel « move »
+    PersoEnvoieSurEcran(hwnd, ecran)
+}
+PersoNomEcran(hmon) {
+    mi := Buffer(104, 0)                         ; MONITORINFOEXW
+    NumPut('UInt', 104, mi, 0)
+    DllCall('user32\GetMonitorInfoW', 'Ptr', hmon, 'Ptr', mi)
+    return StrGet(mi.Ptr + 40, 32, 'UTF-16')
 }
 
 ; --- Focus qui suit la souris : gardien ----------------------------------------
@@ -1471,6 +2387,8 @@ PersoRediffuseTray() {
 ; fenêtre en la survolant ». Toutes les 2 s, on vérifie et on le remet si besoin.
 SetTimer(PersoSurveilleSurvol, 2000)
 PersoSurveilleSurvol() {
+    if FileExist(A_Temp '\winarchy-perso-komorebi-pause')     ; Super+Espace en cours (devant.ahk le remet)
+        return
     actif := 0
     DllCall('SystemParametersInfo', 'UInt', 0x1000, 'UInt', 0, 'Int*', &actif, 'UInt', 0)  ; GET ACTIVEWINDOWTRACKING
     if actif
@@ -1516,6 +2434,7 @@ PersoLanceDevant() {
     Restart-WinarchyAhk $MainAhk $ahkExe
     Set-Survol $true
     Set-ToucheOffice $true
+    Set-RaccourcisWindows $true
     Set-KomorebiAdmin $true
 }
 
@@ -1816,7 +2735,10 @@ function Edit-ModeleYasb([string]$t) {
     $t = $t.Replace(', "disques_reseau"', '').Replace(', "disques"', '')
     # Directement dans la barre après le groupe système (même écart qu'entre les groupes).
     if ($t -notmatch '"system", ' -or $t -notmatch '(?m)^  memory:') { throw 'ancre disques absente' }
-    $t = $t.Replace('"system", ', '"system", "disques", "disques_reseau", ')
+    $t = $t.Replace('"system", ', '"system", "disques", ')
+    # Barre complète trop chargée pour 1920 px : sans titre de fenêtre active ni météo
+    # (disques réseau non plus, voir juste au-dessus ; le widget reste défini).
+    $t = $t.Replace('"taskbar", "active_window", ', '"taskbar", ').Replace('right: ["weather", ', 'right: [')
     $modele = @'
   # Disques LIBELLE (perso, setup-winarchy.ps1) : % utilisé, survol = détail de tous les disques,
   # clic = Ce PC, droit/milieu = espace libre. {data[...]} hors <span> (sinon pas substitué).
@@ -1843,41 +2765,51 @@ function Edit-ModeleYasb([string]$t) {
     $bloc = ($modele.Replace('LIBELLE', 'locaux').Replace('CLE', 'disques').Replace('CLASSE', 'disques-widget').Replace('DONNEE', 'local') + "`n" +
              $modele.Replace('LIBELLE', 'réseau').Replace('CLE', 'disques_reseau').Replace('CLASSE', 'disques-reseau-widget').Replace('DONNEE', 'reseau') + "`n") -replace '\r?\n', $(if ($t -match "`r`n") { "`r`n" } else { "`n" })
     $t = [regex]::Replace($t, '(?m)^(?=  memory:)', $bloc.Replace('$', '$$'), 1)
-    # Perf GPU / CPU / RAM : widgets natifs remplacés par des CustomWidget pour avoir une bulle
-    # au survol (les natifs n'en ont pas). cpu lance perf.ps1 (écrit perf.json), gpu/memory relisent
-    # perf.json. Clic = Gestionnaire des tâches, droit = libellé alternatif. Remplacés sur place.
+    # Perf CPU / RAM : widgets natifs YASB (mesure en interne via psutil, sans lancer de process).
+    # L'ancienne version (CustomWidget + perf.ps1 toutes les 4 s, ~2 s de WMI par passage, × 2 écrans)
+    # faisait tourner le CPU et les ventilateurs en continu. Pas de bulle au survol avec les natifs.
+    # GPU retiré : le widget natif ne gère que NVIDIA (nvidia-smi), ici Radeon intégrée.
+    # Clic = Gestionnaire des tâches, droit/milieu = libellé alternatif. Remplacés sur place.
     $nlY = if ($t -match "`r`n") { "`r`n" } else { "`n" }
-    $modelePerf = @'
-  CLE:
-    # Perf (perso, setup-winarchy.ps1) : bulle = détail, clic = Gestionnaire des tâches.
-    type: "yasb.custom.CustomWidget"
+    $icCpu = [char]::ConvertFromUtf32(0xF4BC); $icRam = [char]::ConvertFromUtf32(0xF035B)
+    $natifs = @{
+        cpu = @'
+  cpu:
+    # Perf (perso, setup-winarchy.ps1) : widget natif, clic = Gestionnaire des tâches.
+    type: "yasb.cpu.CpuWidget"
     options:
-      class_name: "CLASSE"
-      label: "{data[DONNEE]}"
-      label_alt: "{data[DONNEE_alt]}"
-      label_placeholder: "…"
-      tooltip: true
-      tooltip_label: "{data[DONNEE_detail]}"
-      exec_options:
-        run_cmd: 'COMMANDE'
-        run_interval: INTERVALLE
-        return_format: "json"
-        use_shell: true
-        encoding: "utf-8"
+      label: "<span>ICCPU</span> {info[percent][total]}%"
+      label_alt: "<span>ICCPU</span> {info[freq][current]} MHz"
+      update_interval: 3000
       callbacks:
         on_left: "exec taskmgr.exe"
         on_middle: "toggle_label"
         on_right: "toggle_label"
 
 '@
-    $lancePerf = 'powershell.exe -NoProfile -ExecutionPolicy Bypass -File %USERPROFILE%\.winarchy-perso\perf.ps1'
-    $litPerf = 'cmd.exe /c type %USERPROFILE%\.winarchy-perso\perf.json'
-    foreach ($w in @(@('gpu', 'gpu-widget', 'gpu', $litPerf, 4000), @('cpu', 'cpu-widget', 'cpu', $lancePerf, 4000), @('memory', 'memory-widget', 'ram', $litPerf, 4000))) {
-        $rx = "(?m)^  $($w[0]):\r?\n(?:(?:    [^\r\n]*)?\r?\n)*"
-        if ($t -notmatch $rx) { throw "ancre perf $($w[0]) absente" }
-        $b = ($modelePerf.Replace('CLE', $w[0]).Replace('CLASSE', $w[1]).Replace('DONNEE', $w[2]).Replace('COMMANDE', $w[3]).Replace('INTERVALLE', [string]$w[4])) -replace '\r?\n', $nlY
+        memory = @'
+  memory:
+    # Perf (perso, setup-winarchy.ps1) : widget natif, clic = Gestionnaire des tâches.
+    type: "yasb.memory.MemoryWidget"
+    options:
+      label: "<span>ICRAM</span> {virtual_mem_percent}%"
+      label_alt: "<span>ICRAM</span> {virtual_mem_free} libres"
+      update_interval: 5000
+      callbacks:
+        on_left: "exec taskmgr.exe"
+        on_middle: "toggle_label"
+        on_right: "toggle_label"
+
+'@
+    }
+    foreach ($cle in 'cpu', 'memory') {
+        $rx = "(?m)^  ${cle}:\r?\n(?:(?:    [^\r\n]*)?\r?\n)*"
+        if ($t -notmatch $rx) { throw "ancre perf $cle absente" }
+        $b = $natifs[$cle].Replace('ICCPU', $icCpu).Replace('ICRAM', $icRam) -replace '\r?\n', $nlY
         $t = [regex]::Replace($t, $rx, $b.Replace('$', '$$'), 1)
     }
+    $t = [regex]::Replace($t, '(?m)^  gpu:\r?\n(?:(?:    [^\r\n]*)?\r?\n)*', '')
+    $t = $t.Replace('"gpu", ', '')
     # Réseau : même icône (watcher de Winarchy), plus une bulle (connexion, IP, débit, VPN)
     # calculée par reseau.ps1. Bloc « wifi » remplacé sur place.
     $rx = '(?m)^  wifi:\r?\n(?:(?:    [^\r\n]*)?\r?\n)*'
@@ -1950,8 +2882,7 @@ function Edit-ModeleYasb([string]$t) {
     $t = [regex]::Replace($t, '(?s)(\n  home:\r?\n.*?on_left: )"[^"\r\n]*"', '${1}"exec cmd.exe /c %USERPROFILE%\\.winarchy-perso\\lanceur.ahk"', 1)
     # Batterie : pourcentage toujours affiché (clic = icône seule).
     $t = [regex]::Replace($t, '(BatteryWidget"\s*\r?\n\s*options:\s*\r?\n\s*label: )"<span>\{icon\}</span>"(\s*\r?\n\s*label_alt: )"<span>\{icon\}</span> \{percent\}%"', '${1}"<span>{icon}</span> {percent}%"${2}"<span>{icon}</span>"')
-    # Zone de notification : toutes les icônes, pas seulement celles épinglées (Alt+clic).
-    $t = $t.Replace('show_unpinned: false', 'show_unpinned: true')
+    # Zone de notification : repliée par défaut (clic sur ▸ pour voir les icônes non épinglées).
     # Écran du laptop (1536 px de large à 125 %) : trop étroit pour tous les widgets de
     # droite, la barre était coupée. Barre compacte à part ; un écran visé par une barre
     # est retiré de la barre « * ». YASB nomme l'écran interne « \\.\DISPLAY1 » (pas de modèle).
@@ -2001,6 +2932,40 @@ function Edit-ModeleYasb([string]$t) {
     # Widgets de droite de la barre laptop (tenus à jour même si le bloc existe déjà) :
     # tokens Claude, perf (CPU/GPU/RAM), disques, puis l'essentiel.
     $t = [regex]::Replace($t, '(?s)(  laptop-bar:.*?\r?\n      right: )\[[^\]]*\]', '${1}["ai", "system", "disques", "connections", "volume", "battery", "notifications", "systray", "winarchy_menu"]', 1)
+    # Rendez-vous Outlook à droite de l'horloge, sur les deux barres. Bloc reconstruit à chaque passage.
+    if ($t -notmatch '(?m)^  clock:') { throw 'ancre rdv absente' }
+    $t = [regex]::Replace($t, '(?ms)^  # Rendez-vous Outlook \(perso.*?(?=^  clock:)', '')
+    # (L'ancien widget rdv_alerte est retiré : hide_empty de YASB 2.0.7 le masquait pour de bon.)
+    $t = $t.Replace('"rdv", "rdv_alerte"', '"rdv"').Replace('center: ["clock"]', 'center: ["clock", "rdv"]')
+    $bloc = (@'
+  # Rendez-vous Outlook (perso, setup-winarchy.ps1) : prochain RDV d'aujourd'hui/demain.
+  # Lu par COM dans Outlook classique (démarré sans fenêtre s'il est fermé), voir rdv.ps1.
+  # Survol = détail du prochain RDV, clic = calendrier Outlook, droit = bulle des RDV de la
+  # semaine en cours (rdv-bulle.ahk), milieu = relecture forcée d'Outlook (exec_custom relance le widget, rdv.ps1
+  # force la lecture quand la souris est au centre de la barre). 5 min avant un RDV, rdv.ps1 ouvre la
+  # bulle d'alerte sur tous les écrans.
+  rdv:
+    type: "yasb.custom.CustomWidget"
+    options:
+      class_name: "rdv-widget"
+      label: "{data[barre]}"
+      label_alt: "{data[barre]}"
+      label_placeholder: ""
+      tooltip: true
+      tooltip_label: "{data[detail]}"
+      exec_options:
+        run_cmd: 'powershell.exe -NoProfile -ExecutionPolicy Bypass -File %USERPROFILE%\.winarchy-perso\rdv.ps1'
+        run_interval: 60000
+        return_format: "json"
+        use_shell: true
+        encoding: "utf-8"
+      callbacks:
+        on_left: "exec cmd.exe /c start outlook.exe /select outlook:calendar"
+        on_middle: "exec_custom"
+        on_right: "exec cmd.exe /c %USERPROFILE%\\.winarchy-perso\\rdv-bulle.ahk"
+
+'@) -replace '\r?\n', $(if ($t -match "`r`n") { "`r`n" } else { "`n" })
+    $t = [regex]::Replace($t, '(?m)^(?=  clock:)', $bloc.Replace('$', '$$'), 1)
     $t
 }
 
@@ -2105,6 +3070,12 @@ function Edit-ModeleYasbStyles([string]$t) {
 }
 .audio-menu { padding: 10px 12px; }
 '@ + "`n") -replace '\r?\n', $nl
+    # Rendez-vous Outlook (l'alerte est une bulle AutoHotkey, voir rdv-bulle.ahk). Bloc reconstruit.
+    $t = [regex]::Replace($t, '(?ms)\r?\n\r?\n/\* Rendez-vous Outlook \(perso, setup-winarchy\.ps1\).*?(?=\r?\n\r?\n|\s*\z)', '')
+    $t = ($t.TrimEnd() + "`n`n" + @'
+/* Rendez-vous Outlook (perso, setup-winarchy.ps1) */
+.rdv-widget .label { color: {{colors.foreground}}; padding: 0 6px; }
+'@ + "`n") -replace '\r?\n', $nl
     if ($t -match '\.taskbar-widget') { return $t }
     ($t.TrimEnd() + "`n`n" + @'
 /* Fenêtres ouvertes (perso, setup-winarchy.ps1) */
@@ -2177,8 +3148,36 @@ function Set-ReglagesWinarchy([string]$Root) {
         @('manage', 'title', 'DCS Launcher', 'Equals'),
         # Fenêtre principale ESET (classe « ESET Main Frame ») : popup sans WS_CAPTION, topmost, ignorée sans ça.
         @('manage', 'class', 'ESET Main Frame'),
+        # Anciens panneaux qui gèrent mal le passage 125 % -> 100 % : tuilés, ils débordaient
+        # sur l'écran voisin. Flottants (devant.ahk les met devant, sur l'écran de la souris).
+        @('floating', 'title', 'fonctionnalit', 'Contains'),
+        @('floating', 'exe', 'Taskmgr.exe'),
         @('ignore', 'class', 'MSCTFIME UI'),
-        @('ignore', 'class', 'IME')
+        @('ignore', 'class', 'IME'),
+        # Accès à distance et clients Citrix / VMware : fenêtres de session tuilées.
+        @('manage', 'exe', 'rustdesk.exe'),
+        @('manage', 'exe', 'SelfService.exe'),
+        @('manage', 'exe', 'CDViewer.exe'),
+        @('manage', 'exe', 'wfica32.exe'),
+        @('manage', 'exe', 'workspaces.exe'),
+        # Screenpresso : vit dans la zone de notification ; sa fenêtre « Screenpresso » (calque de
+        # capture) ne doit pas être tuilée.
+        @('tray_and_multi_window', 'exe', 'Screenpresso.exe'),
+        @('ignore', 'title', 'Screenpresso', 'Equals'),
+        # Installateurs : toujours flottants, sinon leurs fenêtres passent derrière les tuiles.
+        @('floating', 'exe', 'msiexec.exe'),
+        @('floating', 'exe', 'CWAInstaller.exe'),
+        @('floating', 'exe', 'WspUsbDriverInstaller.exe'),
+        # Amazon WorkSpaces : seulement la fenêtre de session (titre = nom du WorkSpace). Avec
+        # exe =, komorebi gérait aussi « ToolbarWindow », un calque transparent plein écran posé
+        # sur la session : écran coupé en deux puis clics bloqués (manage passe avant ignore).
+        @('manage', 'title', 'Swissmarine'),
+        @('ignore', 'title', 'ToolbarWindow', 'Equals'),
+        # Rappels Outlook (#32770 « N rappel(s) ») : flottante, komorebi la garde au-dessus.
+        @('floating', 'title', 'rappel(s)', 'EndsWith'),
+        # Teams (ms-teams.exe) : jamais pris en charge tout seul. Par le titre de la fenêtre
+        # principale (« … | Microsoft Teams ») pour ne pas tuiler les toasts et fenêtres annexes.
+        @('manage', 'title', '| Microsoft Teams', 'EndsWith')
     )
     foreach ($r in $voulues) {
         $cat, $cle, $val, $strategie = $r
@@ -2297,6 +3296,7 @@ if ($Desinstaller) {
     Update-ThemeActif $Komorebi
     Install-Raccourcis $Komorebi
     Set-SurveillanceBarre $Komorebi $false
+    Install-ColleClicMilieu $false
     exit 0
 }
 
@@ -2312,6 +3312,7 @@ Install-PolicesBarre $Komorebi
 Set-SurveillanceBarre $Komorebi $true
 Set-ReglagesWinarchy $Komorebi
 Install-Raccourcis $Komorebi
+Install-ColleClicMilieu $true
 Save-ReglagesFork $Komorebi
 
 Write-Host ''

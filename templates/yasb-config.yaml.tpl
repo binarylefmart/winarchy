@@ -43,9 +43,9 @@ bars:
       bottom: 0
       right: 0
     widgets:
-      left: ["home", "komorebi_workspaces", "komorebi_active_layout", "taskbar", "active_window", "extras"]
-      center: ["clock"]
-      right: ["weather", "game_mode", "stay_awake", "media", "ai", "system", "disques", "disques_reseau", "connections", "volume", "battery", "winarchy_update", "notifications", "systray", "winarchy_menu"]
+      left: ["home", "komorebi_workspaces", "komorebi_active_layout", "taskbar", "extras"]
+      center: ["clock", "rdv"]
+      right: ["game_mode", "stay_awake", "media", "ai", "system", "disques", "connections", "volume", "battery", "winarchy_update", "notifications", "systray", "winarchy_menu"]
     layouts:
       left:
         alignment: "left"
@@ -80,7 +80,7 @@ bars:
       right: 0
     widgets:
       left: ["home", "komorebi_workspaces", "taskbar"]
-      center: ["clock"]
+      center: ["clock", "rdv"]
       right: ["ai", "system", "disques", "connections", "volume", "battery", "notifications", "systray", "winarchy_menu"]
     layouts:
       left:
@@ -219,6 +219,31 @@ widgets:
       max_length_ellipsis: "…"
       monitor_exclusive: true
 
+  # Rendez-vous Outlook (perso, setup-winarchy.ps1) : prochain RDV d'aujourd'hui/demain.
+  # Lu par COM dans Outlook classique (démarré sans fenêtre s'il est fermé), voir rdv.ps1.
+  # Survol = détail du prochain RDV, clic = calendrier Outlook, droit = bulle des RDV d'aujourd'hui et
+  # demain (rdv-bulle.ahk), milieu = relecture forcée d'Outlook (exec_custom relance le widget, rdv.ps1
+  # force la lecture quand la souris est au centre de la barre). 5 min avant un RDV, rdv.ps1 ouvre la
+  # bulle d'alerte sur tous les écrans.
+  rdv:
+    type: "yasb.custom.CustomWidget"
+    options:
+      class_name: "rdv-widget"
+      label: "{data[barre]}"
+      label_alt: "{data[barre]}"
+      label_placeholder: ""
+      tooltip: true
+      tooltip_label: "{data[detail]}"
+      exec_options:
+        run_cmd: 'powershell.exe -NoProfile -ExecutionPolicy Bypass -File %USERPROFILE%\.winarchy-perso\rdv.ps1'
+        run_interval: 60000
+        return_format: "json"
+        use_shell: true
+        encoding: "utf-8"
+      callbacks:
+        on_left: "exec cmd.exe /c start outlook.exe /select outlook:calendar"
+        on_middle: "exec_custom"
+        on_right: "exec cmd.exe /c %USERPROFILE%\\.winarchy-perso\\rdv-bulle.ahk"
   clock:
     type: "yasb.clock.ClockWidget"
     options:
@@ -248,42 +273,13 @@ widgets:
         on_middle: "open_media_source"
         on_right: "toggle_label"
 
-  gpu:
-    # Perf (perso, setup-winarchy.ps1) : bulle = détail, clic = Gestionnaire des tâches.
-    type: "yasb.custom.CustomWidget"
-    options:
-      class_name: "gpu-widget"
-      label: "{data[gpu]}"
-      label_alt: "{data[gpu_alt]}"
-      label_placeholder: "…"
-      tooltip: true
-      tooltip_label: "{data[gpu_detail]}"
-      exec_options:
-        run_cmd: 'cmd.exe /c type %USERPROFILE%\.winarchy-perso\perf.json'
-        run_interval: 4000
-        return_format: "json"
-        use_shell: true
-        encoding: "utf-8"
-      callbacks:
-        on_left: "exec taskmgr.exe"
-        on_middle: "toggle_label"
-        on_right: "toggle_label"
   cpu:
-    # Perf (perso, setup-winarchy.ps1) : bulle = détail, clic = Gestionnaire des tâches.
-    type: "yasb.custom.CustomWidget"
+    # Perf (perso, setup-winarchy.ps1) : widget natif, clic = Gestionnaire des tâches.
+    type: "yasb.cpu.CpuWidget"
     options:
-      class_name: "cpu-widget"
-      label: "{data[cpu]}"
-      label_alt: "{data[cpu_alt]}"
-      label_placeholder: "…"
-      tooltip: true
-      tooltip_label: "{data[cpu_detail]}"
-      exec_options:
-        run_cmd: 'powershell.exe -NoProfile -ExecutionPolicy Bypass -File %USERPROFILE%\.winarchy-perso\perf.ps1'
-        run_interval: 4000
-        return_format: "json"
-        use_shell: true
-        encoding: "utf-8"
+      label: "<span></span> {info[percent][total]}%"
+      label_alt: "<span></span> {info[freq][current]} MHz"
+      update_interval: 3000
       callbacks:
         on_left: "exec taskmgr.exe"
         on_middle: "toggle_label"
@@ -331,21 +327,12 @@ widgets:
         on_middle: "toggle_label"
         on_right: "toggle_label"
   memory:
-    # Perf (perso, setup-winarchy.ps1) : bulle = détail, clic = Gestionnaire des tâches.
-    type: "yasb.custom.CustomWidget"
+    # Perf (perso, setup-winarchy.ps1) : widget natif, clic = Gestionnaire des tâches.
+    type: "yasb.memory.MemoryWidget"
     options:
-      class_name: "memory-widget"
-      label: "{data[ram]}"
-      label_alt: "{data[ram_alt]}"
-      label_placeholder: "…"
-      tooltip: true
-      tooltip_label: "{data[ram_detail]}"
-      exec_options:
-        run_cmd: 'cmd.exe /c type %USERPROFILE%\.winarchy-perso\perf.json'
-        run_interval: 4000
-        return_format: "json"
-        use_shell: true
-        encoding: "utf-8"
+      label: "<span>󰍛</span> {virtual_mem_percent}%"
+      label_alt: "<span>󰍛</span> {virtual_mem_free} libres"
+      update_interval: 5000
       callbacks:
         on_left: "exec taskmgr.exe"
         on_middle: "toggle_label"
@@ -551,7 +538,7 @@ widgets:
     type: "yasb.grouper.GrouperWidget"
     options:
       class_name: "system-grouper"
-      widgets: ["gpu", "cpu", "memory"]
+      widgets: ["cpu", "memory"]
       hide_empty: false
       collapse_options:
         enabled: false

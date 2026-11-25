@@ -670,3 +670,6 @@
     margin-top: 6px;
 }
 .audio-menu { padding: 10px 12px; }
+
+/* Rendez-vous Outlook (perso, setup-winarchy.ps1) */
+.rdv-widget .label { color: {{colors.foreground}}; padding: 0 6px; }

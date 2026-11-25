@@ -245,12 +245,21 @@ widgets:
         on_middle: "exec_custom"
         on_right: "exec cmd.exe /c %USERPROFILE%\\.winarchy-perso\\rdv-bulle.ahk"
   # Bulle « en plus » (perso, setup-winarchy.ps1) : CPU, RAM, disques et outils peu utilisés,
-  # dans une bulle AutoHotkey (plus-bulle.ahk) ouverte par ▾, comme le systray.
+  # dans une bulle AutoHotkey (plus-bulle.ahk). Flèche comme le systray : ▸ fermée, ▾ ouverte
+  # (plus-bulle.etat, écrit par la bulle ; type = ~25 ms, sans PowerShell).
   plus:
     type: "yasb.custom.CustomWidget"
     options:
-      label: "▾"
+      label: "{data}"
+      label_alt: "{data}"
+      label_placeholder: "▸"
       class_name: "plus-widget"
+      exec_options:
+        run_cmd: 'cmd.exe /c type %USERPROFILE%\.winarchy-perso\plus-bulle.etat'
+        run_interval: 500
+        return_format: "string"
+        use_shell: true
+        encoding: "utf-8"
       tooltip: true
       tooltip_label: "CPU, RAM, disques et outils"
       callbacks:

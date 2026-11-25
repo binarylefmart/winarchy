@@ -560,7 +560,8 @@ function Write-PlusBulle {
 #SingleInstance Off
 #NoTrayIcon
 ; Bulle « en plus » sous la barre YASB (bouton ▾) : écrit par setup-winarchy.ps1, ne pas modifier ici.
-; CPU / RAM (rafraîchis toutes les 2 s), disques, outils. Reclic sur ▾ ou clic ailleurs = fermer.
+; CPU / RAM (rafraîchis toutes les 2 s), disques, outils. Reclic sur la flèche ou clic ailleurs = fermer.
+; plus-bulle.etat : flèche affichée par le widget (▸ fermée, ▾ ouverte).
 
 Dossier := A_ScriptDir
 Fond := "0c0a12", Texte := "eee2d8", Accent := "f25a00", Rouge := "e0435a", Gris := "9a8a94", Bouton := "2a1d26"
@@ -631,6 +632,8 @@ g.AddText("xm y+4 w1 h1")   ; marge du bas
 
 MajPerf()
 Afficher()
+Etat("▾")                          ; flèche du widget ▾ (relue par YASB) ; ▸ à la fermeture
+OnExit((*) => Etat("▸"))
 SetTimer(MajPerf, 2000)
 SetTimer(ClicDehors, 50)
 
@@ -685,6 +688,12 @@ TempsCpu() {
 Go(v) {
     go := v > 1e7 ? v / 1073741824 : v / 1024
     return go >= 1000 ? StrReplace(Format("{:.1f}", go / 1024), ".", ",") " To" : StrReplace(Format("{:.1f}", go), ".", ",") " Go"
+}
+
+Etat(fleche) {
+    f := Dossier "\plus-bulle.etat"
+    try FileDelete(f)
+    try FileAppend(fleche, f, "UTF-8-RAW")
 }
 
 OuvrirDisque(d) => Lancer('explorer.exe "' d '"')
@@ -746,6 +755,7 @@ Bgr(hex) {
     return ((v & 0xFF) << 16) | (v & 0xFF00) | ((v >> 16) & 0xFF)
 }
 '@
+    [IO.File]::WriteAllText((Join-Path $Perso 'plus-bulle.etat'), '▸', (New-Object Text.UTF8Encoding $false))
     Ok "Bulle « en plus » de la barre : $ahk"
 }
 
@@ -2630,7 +2640,7 @@ PersoCrochetDevant() {
 ; sur elle. Super toujours tenu : on revole le focus pour la touche suivante. Super
 ; relâché : Ninja reprend le focus si rien d'autre ne l'a pris (Super seul : Flow).
 ; Touches ordinaires (lettres, flèches…) : Ninja avale l'appui même sans le focus ; seul
-; le relâchement arrive, et PersoRejoue rejoue alors la touche pour que le raccourci parte.
+; le relâchement arrive, et PersoToucheAvalee fait l'action (flèches, Super+W).
 PersoRawInit()
 PersoRawInit() {
     global PersoLeurre := Gui('-Caption +ToolWindow +AlwaysOnTop')
@@ -2677,7 +2687,7 @@ PersoRawClavier(wParam, lParam, *) {
         ; normal parte.
         if (PersoNinja && PersoWinTenu && !vus.Has(vk)) {
             PersoAutreTouche := true
-            SetTimer(PersoRejoue.Bind(vk), -60)
+            SetTimer(PersoToucheAvalee.Bind(vk, GetKeyState('Alt', 'P'), GetKeyState('Ctrl', 'P'), GetKeyState('Shift', 'P')), -250)
         }
         if vus.Has(vk)
             vus.Delete(vk)
@@ -2712,23 +2722,39 @@ PersoAvantRaccourci() {
     }
     return true
 }
-PersoRejoue(vk) {
-    global PersoNinja, PersoDernierRacc, PersoRaccourciFait
-    nom := GetKeyName(Format('vk{:02X}', vk))
-    if (nom = '')
-        return
+; Appui avalé par Ninja (seul le relâchement est arrivé) : action faite directement, sans
+; rejouer la touche (Ninja avale aussi les touches rejouées tant que Super est tenu).
+PersoToucheAvalee(vk, alt, ctrl, maj) {
+    global PersoNinja, PersoLeurre, PersoDernierRacc, PersoRaccourciFait
     ; Un raccourci est déjà parti pour cette touche (l'appui était passé jusqu'à AHK) : rien.
-    if (A_TickCount - PersoDernierRacc < 500)
+    if (A_TickCount - PersoDernierRacc < 600)
         return
-    if (A_TimeSincePriorHotkey != '' && A_TimeSincePriorHotkey < 500
+    nom := GetKeyName(Format('vk{:02X}', vk))
+    if (nom != '' && A_TimeSincePriorHotkey != '' && A_TimeSincePriorHotkey < 600
         && SubStr(A_PriorHotkey, -StrLen(nom)) = nom)
         return
     if !PersoNinja || !WinExist('ahk_id ' PersoNinja)
         return
-    PersoRaccourciFait := true
-    SendLevel(1)                                    ; pour déclencher nos propres raccourcis
-    Send('{Blind}{' nom '}')
-    SendLevel(0)
+    dir := (vk >= 0x25 && vk <= 0x28) ? ['left', 'up', 'right', 'down'][vk - 0x24] : ''
+    if (dir = '' && !(vk = 0x57 && !alt && !ctrl && !maj))   ; seulement flèches et Super+W
+        return
+    PersoRaccourciFait := true, PersoDernierRacc := A_TickCount
+    DllCall('SetForegroundWindow', 'Ptr', PersoNinja)
+    PersoLeurre.Hide()
+    Sleep(30)
+    if (vk = 0x57) {
+        PostMessage(0x0010, 0, 0, , 'ahk_id ' PersoNinja)     ; Super+W : fermer Ninja
+        return
+    }
+    if ctrl
+        PersoVersEcran(dir)
+    else if alt
+        PersoPlace(dir)
+    else if maj
+        PersoKomorebic('move ' dir)
+    else
+        PersoKomorebic('focus ' dir)
+    SetTimer(PersoRevole, -300)
 }
 PersoRevole() {
     global PersoNinja, PersoWinTenu
@@ -3354,12 +3380,21 @@ function Edit-ModeleYasb([string]$t) {
     $t = [regex]::Replace($t, '(?ms)^  # Bulle « en plus » \(perso.*?(?=^  clock:)', '')
     $bloc = (@'
   # Bulle « en plus » (perso, setup-winarchy.ps1) : CPU, RAM, disques et outils peu utilisés,
-  # dans une bulle AutoHotkey (plus-bulle.ahk) ouverte par ▾, comme le systray.
+  # dans une bulle AutoHotkey (plus-bulle.ahk). Flèche comme le systray : ▸ fermée, ▾ ouverte
+  # (plus-bulle.etat, écrit par la bulle ; type = ~25 ms, sans PowerShell).
   plus:
     type: "yasb.custom.CustomWidget"
     options:
-      label: "▾"
+      label: "{data}"
+      label_alt: "{data}"
+      label_placeholder: "▸"
       class_name: "plus-widget"
+      exec_options:
+        run_cmd: 'cmd.exe /c type %USERPROFILE%\.winarchy-perso\plus-bulle.etat'
+        run_interval: 500
+        return_format: "string"
+        use_shell: true
+        encoding: "utf-8"
       tooltip: true
       tooltip_label: "CPU, RAM, disques et outils"
       callbacks:

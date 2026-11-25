@@ -25,9 +25,9 @@ InstallMouseHook()
 #r::PersoIci(), Run('explorer.exe shell:::{2559a1f3-21d7-11d4-bdaf-00c04f60b9f0}')   ; Exécuter
 #i::PersoIci(), Run('ms-settings:')               ; Paramètres Windows
 ; Raccourcis de Winarchy repris pour s'ouvrir sur l'écran de la souris (PersoIci).
-#e::PersoLanceIci(() => Run('explorer.exe'))     ; Explorateur, sur l'écran de la souris
-#b::PersoIci(), Run(DefaultBrowser())   ; Navigateur
 #Enter::Wezterm('start --position ' PersoCoinSouris())   ; Terminal
+#b::PersoIci(), Run(DefaultBrowser())   ; Navigateur
+#e::PersoLanceIci(() => Run('explorer.exe'))     ; Explorateur, sur l'écran de la souris
 #Space::PersoDemarrer()                           ; Menu Démarrer + barre des tâches Windows entière
 #q::ShowMainMenu()                                ; Menu Winarchy
 ; Super seul = lanceur d'applis (Flow, l'ancien Super+Espace) au lieu du menu Démarrer.
@@ -734,6 +734,7 @@ PersoScreenpresso() {
     KeyWait('LWin'), KeyWait('RWin'), KeyWait('Shift')
     Run('"' A_AhkPath '" "' EnvGet('USERPROFILE') '\.winarchy-perso\screenpresso-capture.ahk"')
 }
+
 PersoCache() {
     liste := PersoCachees()
     PersoNettoie(liste)

@@ -559,13 +559,15 @@ function Write-PlusBulle {
 #Requires AutoHotkey v2.0
 #SingleInstance Off
 #NoTrayIcon
-; Bulle « en plus » sous la barre YASB (bouton ▾) : écrit par setup-winarchy.ps1, ne pas modifier ici.
-; CPU / RAM (rafraîchis toutes les 2 s), disques, outils. Reclic sur la flèche ou clic ailleurs = fermer.
+; Bulle « en plus » sous la barre YASB : écrit par setup-winarchy.ps1, ne pas modifier ici.
+; Grille d'icônes comme le popup du systray (mêmes icônes que la barre) : CPU / RAM (rafraîchis
+; toutes les 2 s), disques, puis outils. Reclic sur la flèche ou clic ailleurs = fermer.
 ; plus-bulle.etat : flèche affichée par le widget (▸ fermée, ▾ ouverte).
 
 Dossier := A_ScriptDir
-Fond := "0c0a12", Texte := "eee2d8", Accent := "f25a00", Rouge := "e0435a", Gris := "9a8a94", Bouton := "2a1d26"
-L := 300
+Fond := "0c0a12", Texte := "eee2d8", Accent := "f25a00", Rouge := "e0435a", Gris := "9a8a94", Bouton := "1c141a"
+Reseau := "56b6c2", Police := "JetBrainsMono NFP"
+Cw := 62, Ch := 54, ParLigne := 5
 
 if WinExist("PlusBulle ahk_class AutoHotkeyGUI") {
     WinClose
@@ -580,19 +582,15 @@ PrecCpu := TempsCpu()
 
 g := Gui("+AlwaysOnTop -Caption +ToolWindow +Border", "PlusBulle")
 g.BackColor := Fond
-g.MarginX := 16, g.MarginY := 12
+g.MarginX := 10, g.MarginY := 10
 g.OnEvent("Close", (*) => ExitApp())
 g.OnEvent("Escape", (*) => Fermer())
+Bulles := Map()   ; hwnd -> info-bulle au survol
+N := 0
 
-; --- Performances (clic = Gestionnaire des tâches) ---
-Section("PERFORMANCES", "xm")
-LCpu := Ligne("CPU", "…", () => Lancer("taskmgr.exe"))
-BCpu := Barre()
-LRam := Ligne("RAM", "…", () => Lancer("taskmgr.exe"))
-BRam := Barre()
-
-; --- Disques (clic = ouvrir le disque) ---
-Section("DISQUES")
+; --- Mesures : CPU, RAM, disques ---
+VCpu := Cellule(0xF4BC, "…", "Processeur — Gestionnaire des tâches", () => Lancer("taskmgr.exe"))
+VRam := Cellule(0xF035B, "…", "Mémoire — Gestionnaire des tâches", () => Lancer("taskmgr.exe"))
 for genre in ["FIXED", "NETWORK"] {
     try lettres := DriveGetList(genre)
     catch
@@ -609,58 +607,55 @@ for genre in ["FIXED", "NETWORK"] {
         } catch
             continue
         pct := Round((total - libre) * 100 / total)
-        Ligne(A_LoopField ":  " (nom != "" ? nom : genre = "NETWORK" ? "Réseau" : "Local"),
-            pct " %  ·  " Go(libre) " libres", OuvrirDisque.Bind(d), pct >= 90)
-        Barre(pct, genre = "NETWORK" ? "56b6c2" : "")
+        Cellule(genre = "NETWORK" ? 0xF0870 : 0xF02CA, A_LoopField ": " pct "%",
+            A_LoopField ": " (nom != "" ? nom " — " : "") pct " % utilisé, " Go(libre) " libres sur " Go(total),
+            OuvrirDisque.Bind(d), pct >= 90 ? Rouge : genre = "NETWORK" ? Reseau : Accent)
     }
 }
 
-; --- Outils ---
-Section("OUTILS")
-w := (L - 8) // 2
-Outils := [
-    ["Texte de l'écran (OCR)", "winarchy screenshot ocr"],
-    ["Lire un QR code", "winarchy screenshot qr"],
-    ["Pipette", "winarchy screenshot color"],
-    ["Corbeille", "explorer.exe shell:RecycleBinFolder"],
-    ["Plan d'alimentation", "control.exe powercfg.cpl"],
-    ["Ce PC", "explorer.exe shell:MyComputerFolder"],
-]
-for i, o in Outils
-    AjouterBouton((Mod(i, 2) ? "xm y+8" : "x+8 yp") " w" w, o[1], Lancer.Bind(o[2]))
-g.AddText("xm y+4 w1 h1")   ; marge du bas
+; --- Outils (nouvelle ligne) ---
+N := 0
+g.AddText("xm y+8 w" (ParLigne * Cw + (ParLigne - 1) * 4) " h1 Background" "2a1d26")
+Cellule(0xF031, "OCR", "Texte de l'écran (OCR)", Lancer.Bind("winarchy screenshot ocr"))
+Cellule(0xF029, "QR", "Lire un QR code à l'écran", Lancer.Bind("winarchy screenshot qr"))
+Cellule(0xF1FB, "Pipette", "Pipette (couleur à l'écran)", Lancer.Bind("winarchy screenshot color"))
+Cellule(0xF014, "Corbeille", "Ouvrir la corbeille", Lancer.Bind("explorer.exe shell:RecycleBinFolder"))
+Cellule(0xF04C5, "Énergie", "Plan d'alimentation", Lancer.Bind("control.exe powercfg.cpl"))
+Cellule(0xF0322, "Ce PC", "Ce PC", Lancer.Bind("explorer.exe shell:MyComputerFolder"))
 
 MajPerf()
 Afficher()
-Etat("▾")                          ; flèche du widget ▾ (relue par YASB) ; ▸ à la fermeture
+Etat("▾")
 OnExit((*) => Etat("▸"))
 SetTimer(MajPerf, 2000)
 SetTimer(ClicDehors, 50)
+OnMessage(0x200, Survol)   ; WM_MOUSEMOVE : info-bulle
 
-Section(titre, pos := "xm y+16") {
-    g.SetFont("s8 bold c" Gris, "Segoe UI")
-    g.AddText(pos " w" L, titre)
+; Une cellule : icône (police nerd de la barre) et petit libellé dessous ; toute la case est cliquable.
+Cellule(code, libelle, info, action, couleur := Accent) {
+    global N
+    pos := Mod(N, ParLigne) = 0 ? "xm y+" (N = 0 ? 0 : 4) : "x+4 yp"
+    fondCase := g.AddText(pos " w" Cw " h" Ch " Background" Bouton)
+    fondCase.GetPos(&x, &y)
+    g.SetFont("s15 norm c" couleur, Police)
+    ic := g.AddText("x" x " y" (y + 6) " w" Cw " h24 Center BackgroundTrans", Chr(code))
+    g.SetFont("s8 norm c" Gris, "Segoe UI")
+    lb := g.AddText("x" x " y" (y + 33) " w" Cw " h16 Center BackgroundTrans", libelle)
+    for c in [fondCase, ic, lb] {
+        c.OnEvent("Click", (*) => action())
+        Bulles[c.Hwnd] := info
+    }
+    g.AddText("x" x " y" y " w" Cw " h" Ch " BackgroundTrans Hidden")   ; ancre de la case suivante
+    N += 1
+    return lb
 }
 
-; Nom à gauche, valeur à droite (rouge si alerte) ; toute la ligne est cliquable.
-Ligne(nom, valeur, action, alerte := false) {
-    g.SetFont("s10 norm c" Texte, "Segoe UI")
-    n := g.AddText("xm y+6 w110", nom)
-    g.SetFont("s10 " (alerte ? "bold" : "norm") " c" (alerte ? Rouge : Accent))
-    v := g.AddText("x+0 yp w" (L - 110) " Right", valeur)
-    n.OnEvent("Click", (*) => action())
-    v.OnEvent("Click", (*) => action())
-    return v
-}
-
-Barre(pct := 0, couleur := "") {
-    return g.AddProgress("xm y+3 w" L " h4 c" (couleur != "" ? couleur : pct >= 90 ? Rouge : Accent) " Background" Bouton, pct)
-}
-
-AjouterBouton(opts, libelle, action) {
-    g.SetFont("s9 norm c" Texte, "Segoe UI")
-    b := g.AddText(opts " h28 Center 0x200 Background" Bouton, libelle)   ; 0x200 = centré verticalement
-    b.OnEvent("Click", (*) => action())
+Survol(wParam, lParam, msg, hwnd) {
+    static dernier := 0
+    if hwnd = dernier
+        return
+    dernier := hwnd
+    ToolTip(Bulles.Has(hwnd) ? Bulles[hwnd] : "")
 }
 
 MajPerf() {
@@ -673,10 +668,9 @@ MajPerf() {
     NumPut("UInt", 64, mem)
     DllCall("GlobalMemoryStatusEx", "Ptr", mem)
     ram := NumGet(mem, 4, "UInt"), tot := NumGet(mem, 8, "UInt64"), dispo := NumGet(mem, 16, "UInt64")
-    LCpu.Text := cpu " %"
-    BCpu.Value := cpu
-    LRam.Text := ram " %  ·  " Go(tot - dispo) " / " Go(tot)
-    BRam.Value := ram
+    VCpu.Text := cpu " %"
+    VRam.Text := ram " %"
+    Bulles[VRam.Hwnd] := "Mémoire : " Go(tot - dispo) " / " Go(tot) " — Gestionnaire des tâches"
 }
 
 TempsCpu() {
@@ -700,6 +694,7 @@ OuvrirDisque(d) => Lancer('explorer.exe "' d '"')
 
 Lancer(cmd) {
     g.Hide()
+    ToolTip()
     ; winarchy est un .cmd : passé par cmd.exe (fenêtre cachée) ; le reste s'ouvre normalement.
     try {
         if SubStr(cmd, 1, 9) = "winarchy "
@@ -2610,27 +2605,30 @@ PersoSurveilleSurvol() {
 }
 
 ; --- Contrôle à distance : garder les raccourcis Super --------------------------
-; NinjaRemote (ncplayer.exe) pose son propre crochet clavier quand il prend le focus :
-; installé après celui d'AHK, il passe en premier et avale les touches (Super+Shift+2
-; n'arrivait jamais). Dès qu'une de ces fenêtres devient active, on réinstalle le
-; crochet d'AHK pour repasser devant (Windows appelle le dernier installé en premier).
+; Après la parade (Super tenu sur Ninja, focus prêté à une fenêtre invisible), Ninja a
+; transmis à la session distante l'appui de Super (et d'Alt/Ctrl/Shift) mais pas leur
+; relâchement : côté serveur, Super restait enfoncé et on ne pouvait plus écrire. Quand
+; Ninja revient au premier plan, touches relâchées, on lui envoie ces relâchements.
+; (L'ancienne réinstallation du crochet d'AHK ici est retirée : faite pendant que Super
+; était tenu, AHK croyait Super coincé et le copier-coller ne marchait plus.)
+PersoNinjaAReset := 0
 SetTimer(PersoCrochetDevant, 200)
 PersoCrochetDevant() {
-    static dernier := 0
+    global PersoNinjaAReset
+    if !PersoNinjaAReset
+        return
     try hwnd := WinActive('ahk_exe ncplayer.exe')
     catch
         hwnd := 0
-    ; Ninja repose son crochet plus tard (clic dans la session, reconnexion) : tant qu'il est
-    ; au premier plan, on repasse devant toutes les secondes (et tout de suite au focus).
-    static compte := 0
-    if hwnd {
-        compte := (hwnd != dernier) ? 0 : compte + 1
-        if (hwnd != dernier || Mod(compte, 5) = 0)
-            InstallKeybdHook(true, true)
-    }
-    dernier := hwnd
+    if (!hwnd || hwnd != PersoNinjaAReset || GetKeyState('LWin', 'P') || GetKeyState('RWin', 'P'))
+        return
+    PersoNinjaAReset := 0
+    haut := '{LWin up}{RWin up}'
+    for k in ['Alt', 'Ctrl', 'Shift']
+        if !GetKeyState(k, 'P')
+            haut .= '{' k ' up}'
+    SendEvent(haut)
 }
-
 ; Ninja avale les touches ordinaires (journal : Super et Shift arrivent, les autres
 ; jamais, pas même en Raw Input). Parade : on suit Super en Raw Input ; dès qu'il est
 ; tenu sur Ninja, on lui retire le focus au profit d'une fenêtre invisible d'AHK, et la
@@ -2738,12 +2736,14 @@ PersoToucheAvalee(vk, alt, ctrl, maj) {
     dir := (vk >= 0x25 && vk <= 0x28) ? ['left', 'up', 'right', 'down'][vk - 0x24] : ''
     if (dir = '' && !(vk = 0x57 && !alt && !ctrl && !maj))   ; seulement flèches et Super+W
         return
+    ; Copie locale : Super relâché entre-temps remet PersoNinja à 0 (PersoRendNinja).
+    h := PersoNinja
     PersoRaccourciFait := true, PersoDernierRacc := A_TickCount
-    DllCall('SetForegroundWindow', 'Ptr', PersoNinja)
+    DllCall('SetForegroundWindow', 'Ptr', h)
     PersoLeurre.Hide()
     Sleep(30)
     if (vk = 0x57) {
-        PostMessage(0x0010, 0, 0, , 'ahk_id ' PersoNinja)     ; Super+W : fermer Ninja
+        try PostMessage(0x0010, 0, 0, , 'ahk_id ' h)     ; Super+W : fermer Ninja
         return
     }
     if ctrl
@@ -2766,6 +2766,7 @@ PersoRendNinja() {
     if (PersoWinTenu || !PersoNinja)
         return
     h := PersoNinja
+    global PersoNinjaAReset := h                    ; relâchements à renvoyer à Ninja (PersoCrochetDevant)
     encore := WinActive('ahk_id ' PersoLeurre.Hwnd)
     PersoNinja := 0
     PersoLeurre.Hide()
@@ -2784,8 +2785,10 @@ PersoRendNinja() {
 ; désigner la fenêtre invisible au moment où le raccourci s'exécute).
 #w:: {
     global PersoNinja
-    if (PersoNinja && WinExist('ahk_id ' PersoNinja))
-        PostMessage(0x0010, 0, 0, , 'ahk_id ' PersoNinja)   ; WM_CLOSE
+    h := PersoNinja
+    if (h && WinExist('ahk_id ' h)) {
+        try PostMessage(0x0010, 0, 0, , 'ahk_id ' h)   ; WM_CLOSE
+    }
     else
         CloseWindow()
 }
@@ -3381,7 +3384,8 @@ function Edit-ModeleYasb([string]$t) {
     $bloc = (@'
   # Bulle « en plus » (perso, setup-winarchy.ps1) : CPU, RAM, disques et outils peu utilisés,
   # dans une bulle AutoHotkey (plus-bulle.ahk). Flèche comme le systray : ▸ fermée, ▾ ouverte
-  # (plus-bulle.etat, écrit par la bulle ; type = ~25 ms, sans PowerShell).
+  # (plus-bulle.etat, écrit par la bulle). Surtout pas « encoding » : avec return_format string, YASB 2.0.7
+  # appelle .decode() sur du texte, le thread plante et la flèche ne change jamais.
   plus:
     type: "yasb.custom.CustomWidget"
     options:
@@ -3390,11 +3394,10 @@ function Edit-ModeleYasb([string]$t) {
       label_placeholder: "▸"
       class_name: "plus-widget"
       exec_options:
-        run_cmd: 'cmd.exe /c type %USERPROFILE%\.winarchy-perso\plus-bulle.etat'
-        run_interval: 500
+        run_cmd: 'type %USERPROFILE%\.winarchy-perso\plus-bulle.etat'
+        run_interval: 1000
         return_format: "string"
         use_shell: true
-        encoding: "utf-8"
       tooltip: true
       tooltip_label: "CPU, RAM, disques et outils"
       callbacks:

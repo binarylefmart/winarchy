@@ -3301,15 +3301,16 @@ function Edit-ModeleYasb([string]$t) {
     # Zone de notification : repliée par défaut (clic sur ▸ pour voir les icônes non épinglées).
     # Écran du laptop (1536 px de large à 125 %) : trop étroit pour tous les widgets de
     # droite, la barre était coupée. Barre compacte à part ; un écran visé par une barre
-    # est retiré de la barre « * ». YASB nomme l'écran interne « \\.\DISPLAY1 » (pas de modèle).
+    # est retiré de la barre « * ». Écrans choisis selon leur largeur par Watch-YasbZone.ps1
+    # (plus « \\.\DISPLAY1 » : sur un fixe, c'est l'écran principal, même très large).
     if ($t -notmatch '(?m)^  laptop-bar:') {
         if ($t -notmatch '(?m)^widgets:') { throw 'ancre laptop-bar absente' }
         $nl = if ($t -match "`r`n") { "`r`n" } else { "`n" }
         $bloc = (@'
-  # Écran du laptop (perso, setup-winarchy.ps1) : barre compacte, la barre complète y était coupée.
+  # Écrans étroits (perso, setup-winarchy.ps1) : barre compacte ; écrans choisis par Watch-YasbZone.ps1.
   laptop-bar:
     enabled: true
-    screens: ["\\\\.\\DISPLAY1"]
+    screens: ["aucun"]
     class_name: "yasb-bar"
     alignment:
       position: "{{computed.bar_position}}"
@@ -3421,6 +3422,82 @@ function Edit-ModeleYasb([string]$t) {
 
 '@) -replace '\r?\n', $(if ($t -match "`r`n") { "`r`n" } else { "`n" })
     $t = [regex]::Replace($t, '(?m)^(?=  clock:)', $bloc.Replace('$', '$$'), 1)
+    # Barres selon la LARGEUR de l'écran, plus selon son nom (sur un fixe, \\.\DISPLAY1 était l'écran
+    # 3440 px, qui recevait la barre compacte) : écran étroit -> laptop-bar, large -> wide-bar,
+    # moyen -> status-bar (« * »). Les écrans de chaque barre sont écrits dans config.yaml (non
+    # versionné) par Watch-YasbZone.ps1, qui relance YASB ; ici, valeur neutre (aucun écran).
+    $t = [regex]::Replace($t, '(?ms)(^  laptop-bar:.*?^    screens: )\[[^\]\r\n]*\]', '${1}["aucun"]', 1)
+    $t = $t.Replace('# Écran du laptop (perso, setup-winarchy.ps1) : barre compacte, la barre complète y était coupée.', '# Écrans étroits (perso, setup-winarchy.ps1) : barre compacte ; écrans choisis par Watch-YasbZone.ps1.')
+    # Écran large : tout dans la barre (CPU, RAM, disques, outils, icônes non épinglées du systray),
+    # pas de bulle « en plus ». Blocs reconstruits à chaque passage, APRÈS les remplacements
+    # ci-dessus qui retirent "system", les outils et power_plan des listes.
+    $nl = if ($t -match "`r`n") { "`r`n" } else { "`n" }
+    $t = [regex]::Replace($t, '(?ms)^  # Écrans larges \(perso.*?(?=^widgets:)', '')
+    $t = [regex]::Replace($t, '(?ms)^  # Barre large \(perso.*?(?=^  systray:)', '')
+    if ($t -notmatch '(?m)^widgets:' -or $t -notmatch '(?m)^  systray:') { throw 'ancre wide-bar absente' }
+    $bloc = (@'
+  # Écrans larges (perso, setup-winarchy.ps1) : tout dans la barre ; écrans choisis par Watch-YasbZone.ps1.
+  wide-bar:
+    enabled: true
+    screens: ["aucun"]
+    class_name: "yasb-bar"
+    alignment:
+      position: "{{computed.bar_position}}"
+      align: "center"
+    blur_effect:
+      enabled: false
+    window_flags:
+      always_on_top: true
+      windows_app_bar: true
+    dimensions:
+      width: "100%"
+      height: {{bar.height}}
+    padding:
+      top: 0
+      left: 0
+      bottom: 0
+      right: 0
+    widgets:
+      left: ["home", "komorebi_workspaces", "komorebi_active_layout", "taskbar", "extras_large"]
+      center: ["clock", "rdv"]
+      right: ["game_mode", "stay_awake", "media", "ai", "system", "disques", "disques_reseau", "connections", "volume", "battery", "winarchy_update", "notifications", "systray_large", "winarchy_menu"]
+    layouts:
+      left:
+        alignment: "left"
+        stretch: true
+      center:
+        alignment: "center"
+        stretch: false
+      right:
+        alignment: "right"
+        stretch: true
+
+'@) -replace '\r?\n', $nl
+    $t = [regex]::Replace($t, '(?m)^(?=widgets:)', $bloc.Replace('$', '$$'), 1)
+    $bloc = (@'
+  # Barre large (perso, setup-winarchy.ps1) : outils peu utilisés dans la barre, systray déplié.
+  extras_large:
+    type: "yasb.grouper.GrouperWidget"
+    options:
+      class_name: "extras-grouper"
+      widgets: ["tool_region", "tool_clipboard", "tool_ocr", "tool_qr", "tool_color", "recycle_bin", "dnd", "brightness", "power_plan"]
+      hide_empty: false
+      collapse_options:
+        enabled: false
+        label_position: "left"
+        collapsed_label: "▸"
+        expanded_label: "◂"
+  systray_large:
+    type: "yasb.systray.SystrayWidget"
+    options:
+      label_collapsed: "▸"
+      label_expanded: "▾"
+      pin_click_modifier: "alt"
+      show_unpinned: true
+      hide_icons: ["ShareX"]
+
+'@) -replace '\r?\n', $nl
+    $t = [regex]::Replace($t, '(?m)^(?=  systray:)', $bloc.Replace('$', '$$'), 1)
     $t
 }
 

@@ -57,10 +57,10 @@ bars:
         alignment: "right"
         stretch: true
 
-  # Écran du laptop (perso, setup-winarchy.ps1) : barre compacte, la barre complète y était coupée.
+  # Écrans étroits (perso, setup-winarchy.ps1) : barre compacte ; écrans choisis par Watch-YasbZone.ps1.
   laptop-bar:
     enabled: true
-    screens: ["\\\\.\\DISPLAY1"]
+    screens: ["aucun"]
     class_name: "yasb-bar"
     alignment:
       position: "{{computed.bar_position}}"
@@ -82,6 +82,41 @@ bars:
       left: ["home", "komorebi_workspaces", "taskbar"]
       center: ["clock", "rdv"]
       right: ["ai", "plus", "connections", "volume", "battery", "notifications", "systray", "winarchy_menu"]
+    layouts:
+      left:
+        alignment: "left"
+        stretch: true
+      center:
+        alignment: "center"
+        stretch: false
+      right:
+        alignment: "right"
+        stretch: true
+  # Écrans larges (perso, setup-winarchy.ps1) : tout dans la barre ; écrans choisis par Watch-YasbZone.ps1.
+  wide-bar:
+    enabled: true
+    screens: ["aucun"]
+    class_name: "yasb-bar"
+    alignment:
+      position: "{{computed.bar_position}}"
+      align: "center"
+    blur_effect:
+      enabled: false
+    window_flags:
+      always_on_top: true
+      windows_app_bar: true
+    dimensions:
+      width: "100%"
+      height: {{bar.height}}
+    padding:
+      top: 0
+      left: 0
+      bottom: 0
+      right: 0
+    widgets:
+      left: ["home", "komorebi_workspaces", "komorebi_active_layout", "taskbar", "extras_large"]
+      center: ["clock", "rdv"]
+      right: ["game_mode", "stay_awake", "media", "ai", "system", "disques", "disques_reseau", "connections", "volume", "battery", "winarchy_update", "notifications", "systray_large", "winarchy_menu"]
     layouts:
       left:
         alignment: "left"
@@ -690,6 +725,26 @@ widgets:
 
   # Solo iconos pinneados a la vista; el resto detrás del botón.
   # Pinnear/despinnear: alt+click sobre el icono.
+  # Barre large (perso, setup-winarchy.ps1) : outils peu utilisés dans la barre, systray déplié.
+  extras_large:
+    type: "yasb.grouper.GrouperWidget"
+    options:
+      class_name: "extras-grouper"
+      widgets: ["tool_region", "tool_clipboard", "tool_ocr", "tool_qr", "tool_color", "recycle_bin", "dnd", "brightness", "power_plan"]
+      hide_empty: false
+      collapse_options:
+        enabled: false
+        label_position: "left"
+        collapsed_label: "▸"
+        expanded_label: "◂"
+  systray_large:
+    type: "yasb.systray.SystrayWidget"
+    options:
+      label_collapsed: "▸"
+      label_expanded: "▾"
+      pin_click_modifier: "alt"
+      show_unpinned: true
+      hide_icons: ["ShareX"]
   systray:
     type: "yasb.systray.SystrayWidget"
     options:

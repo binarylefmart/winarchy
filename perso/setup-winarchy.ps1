@@ -581,9 +581,10 @@ CoordMode "Mouse", "Screen"
 MouseGetPos &SourisX, &SourisY
 PrecCpu := TempsCpu()
 
-g := Gui("+AlwaysOnTop -Caption +ToolWindow +Border", "PlusBulle")
+g := Gui("+AlwaysOnTop -Caption +ToolWindow +Border -DPIScale", "PlusBulle")   ; tout en pixels réels (marges égales)
 g.BackColor := Fond
-g.MarginX := 10, g.MarginY := 10
+Marge := 14
+g.MarginX := Marge, g.MarginY := Marge
 g.OnEvent("Close", (*) => ExitApp())
 g.OnEvent("Escape", (*) => Fermer())
 Bulles := Map()   ; hwnd -> {info-bulle, contrôles, couleur}
@@ -631,16 +632,16 @@ OnMessage(0x200, Survol)   ; WM_MOUSEMOVE : info-bulle + couleur de survol
 ; Icône (et valeur à côté) ; cliquable. Retourne le contrôle de la valeur (mis à jour pour CPU / RAM).
 Cellule(code, valeur, info, action, couleur := Orange, largeur := 0) {
     global NouvelleLigne
-    pos := NouvelleLigne ? "xm y+" (IsSet(DejaUneLigne) ? 8 : 0) : "x+14 yp"
+    pos := NouvelleLigne ? (IsSet(DejaUneLigne) ? "xm y+6" : "xm ym") : "x+18 yp"
     if NouvelleLigne
         global DejaUneLigne := true
     NouvelleLigne := false
     g.SetFont("s11 norm c" couleur, PoliceIcone)
-    ic := g.AddText(pos " h24 0x200", Chr(code))   ; 0x200 = centré verticalement
+    ic := g.AddText(pos " h30 0x200", Chr(code))   ; 0x200 = centré verticalement
     ctrls := [ic], v := ""
     if valeur != "" {
         g.SetFont("s10 norm c" couleur, PoliceTexte)
-        v := g.AddText("x+4 yp h24 0x200" (largeur ? " w" largeur : ""), valeur)
+        v := g.AddText("x+5 yp h30 0x200" (largeur ? " w" Round(largeur * A_ScreenDPI / 96) : ""), valeur)
         ctrls.Push(v)
     }
     for c in ctrls {
@@ -744,7 +745,13 @@ Afficher() {
             n := A_Index
     }
     MonitorGetWorkArea(n, &l, &t, &r, &b)
-    g.Show("Hide AutoSize")
+    ; Taille calculée sur le contenu : même marge des quatre côtés (AutoSize en ajoutait à droite / en bas).
+    largeur := 0, hauteur := 0
+    for , c in g {
+        c.GetPos(&cx, &cy, &cw, &ch)
+        largeur := Max(largeur, cx + cw), hauteur := Max(hauteur, cy + ch)
+    }
+    g.Show("Hide w" (largeur + Marge) " h" (hauteur + Marge))
     DllCall("dwmapi\DwmSetWindowAttribute", "Ptr", g.Hwnd, "UInt", 33, "Int*", 2, "UInt", 4)
     DllCall("dwmapi\DwmSetWindowAttribute", "Ptr", g.Hwnd, "UInt", 34, "UInt*", Bgr("55404c"), "UInt", 4)
     g.GetPos(, , &w)

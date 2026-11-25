@@ -560,14 +560,13 @@ function Write-PlusBulle {
 #SingleInstance Off
 #NoTrayIcon
 ; Bulle « en plus » sous la barre YASB : écrit par setup-winarchy.ps1, ne pas modifier ici.
-; Grille d'icônes comme le popup du systray (mêmes icônes que la barre) : CPU / RAM (rafraîchis
-; toutes les 2 s), disques, puis outils. Reclic sur la flèche ou clic ailleurs = fermer.
+; Mêmes icônes que la barre (glyphes, couleurs, tailles de styles.css), sans cases : CPU / RAM
+; (rafraîchis toutes les 2 s) et disques, puis les outils. Reclic sur la flèche ou clic ailleurs = fermer.
 ; plus-bulle.etat : flèche affichée par le widget (▸ fermée, ▾ ouverte).
 
 Dossier := A_ScriptDir
-Fond := "0c0a12", Texte := "eee2d8", Accent := "f25a00", Rouge := "e0435a", Gris := "9a8a94", Bouton := "1c141a"
-Reseau := "56b6c2", Police := "JetBrainsMono NFP"
-Cw := 62, Ch := 54, ParLigne := 5
+Fond := "0c0a12", Texte := "eee2d8", Orange := "fe9025", Survole := "f25a00", Rouge := "e0435a", Reseau := "c4a494"
+PoliceIcone := "JetBrainsMono NFP", PoliceTexte := "JetBrainsMono NF"   ; .widget .icon 15px / * 13px
 
 if WinExist("PlusBulle ahk_class AutoHotkeyGUI") {
     WinClose
@@ -587,12 +586,12 @@ g.BackColor := Fond
 g.MarginX := 10, g.MarginY := 10
 g.OnEvent("Close", (*) => ExitApp())
 g.OnEvent("Escape", (*) => Fermer())
-Bulles := Map()   ; hwnd -> info-bulle au survol
-N := 0
+Bulles := Map()   ; hwnd -> {info-bulle, contrôles, couleur}
 
-; --- Mesures : CPU, RAM, disques ---
-VCpu := Cellule(0xF4BC, "…", "Processeur — Gestionnaire des tâches", () => Lancer("taskmgr.exe"))
-VRam := Cellule(0xF035B, "…", "Mémoire — Gestionnaire des tâches", () => Lancer("taskmgr.exe"))
+; --- Mesures : CPU, RAM, disques (comme les widgets de la barre : icône + valeur) ---
+NouvelleLigne := true
+VCpu := Cellule(0xF4BC, "…", "Processeur — Gestionnaire des tâches", () => Lancer("taskmgr.exe"), Orange, 44)
+VRam := Cellule(0xF035B, "…", "Mémoire — Gestionnaire des tâches", () => Lancer("taskmgr.exe"), Orange, 44)
 for genre in ["FIXED", "NETWORK"] {
     try lettres := DriveGetList(genre)
     catch
@@ -611,51 +610,59 @@ for genre in ["FIXED", "NETWORK"] {
         pct := Round((total - libre) * 100 / total)
         Cellule(genre = "NETWORK" ? 0xF0870 : 0xF02CA, A_LoopField ": " pct "%",
             A_LoopField ": " (nom != "" ? nom " — " : "") pct " % utilisé, " Go(libre) " libres sur " Go(total),
-            OuvrirDisque.Bind(d), pct >= 90 ? Rouge : genre = "NETWORK" ? Reseau : Accent)
+            OuvrirDisque.Bind(d), pct >= 90 ? Rouge : genre = "NETWORK" ? Reseau : Texte)
     }
 }
 
-; --- Outils (nouvelle ligne) ---
-N := 0
-g.AddText("xm y+8 w" (ParLigne * Cw + (ParLigne - 1) * 4) " h1 Background" "2a1d26")
-Cellule(0xF031, "OCR", "Texte de l'écran (OCR)", Lancer.Bind("winarchy screenshot ocr"))
-Cellule(0xF029, "QR", "Lire un QR code à l'écran", Lancer.Bind("winarchy screenshot qr"))
-Cellule(0xF1FB, "Pipette", "Pipette (couleur à l'écran)", Lancer.Bind("winarchy screenshot color"))
-Cellule(0xF014, "Corbeille", "Ouvrir la corbeille", Lancer.Bind("explorer.exe shell:RecycleBinFolder"))
-Cellule(0xF04C5, "Énergie", "Plan d'alimentation", Lancer.Bind("control.exe powercfg.cpl"))
-Cellule(0xF0322, "Ce PC", "Ce PC", Lancer.Bind("explorer.exe shell:MyComputerFolder"))
+; --- Outils (icônes seules, comme sur la barre) ---
+NouvelleLigne := true
+Cellule(0xF031, "", "Texte de l'écran (OCR)", Lancer.Bind("winarchy screenshot ocr"))
+Cellule(0xF029, "", "Lire un QR code à l'écran", Lancer.Bind("winarchy screenshot qr"))
+Cellule(0xF1FB, "", "Pipette (couleur à l'écran)", Lancer.Bind("winarchy screenshot color"))
+Cellule(0xF014, "", "Corbeille", Lancer.Bind("explorer.exe shell:RecycleBinFolder"))
+Cellule(0xF04C5, "", "Plan d'alimentation", Lancer.Bind("control.exe powercfg.cpl"))
 
 MajPerf()
 Afficher()
 SetTimer(MajPerf, 2000)
 SetTimer(ClicDehors, 50)
-OnMessage(0x200, Survol)   ; WM_MOUSEMOVE : info-bulle
+OnMessage(0x200, Survol)   ; WM_MOUSEMOVE : info-bulle + couleur de survol
 
-; Une cellule : icône (police nerd de la barre) et petit libellé dessous ; toute la case est cliquable.
-Cellule(code, libelle, info, action, couleur := Accent) {
-    global N
-    pos := Mod(N, ParLigne) = 0 ? "xm y+" (N = 0 ? 0 : 4) : "x+4 yp"
-    fondCase := g.AddText(pos " w" Cw " h" Ch " Background" Bouton)
-    fondCase.GetPos(&x, &y)
-    g.SetFont("s15 norm c" couleur, Police)
-    ic := g.AddText("x" x " y" (y + 6) " w" Cw " h24 Center BackgroundTrans", Chr(code))
-    g.SetFont("s8 norm c" Gris, "Segoe UI")
-    lb := g.AddText("x" x " y" (y + 33) " w" Cw " h16 Center BackgroundTrans", libelle)
-    for c in [fondCase, ic, lb] {
-        c.OnEvent("Click", (*) => action())
-        Bulles[c.Hwnd] := info
+; Icône (et valeur à côté) ; cliquable. Retourne le contrôle de la valeur (mis à jour pour CPU / RAM).
+Cellule(code, valeur, info, action, couleur := Orange, largeur := 0) {
+    global NouvelleLigne
+    pos := NouvelleLigne ? "xm y+" (IsSet(DejaUneLigne) ? 8 : 0) : "x+14 yp"
+    if NouvelleLigne
+        global DejaUneLigne := true
+    NouvelleLigne := false
+    g.SetFont("s11 norm c" couleur, PoliceIcone)
+    ic := g.AddText(pos " h24 0x200", Chr(code))   ; 0x200 = centré verticalement
+    ctrls := [ic], v := ""
+    if valeur != "" {
+        g.SetFont("s10 norm c" couleur, PoliceTexte)
+        v := g.AddText("x+4 yp h24 0x200" (largeur ? " w" largeur : ""), valeur)
+        ctrls.Push(v)
     }
-    g.AddText("x" x " y" y " w" Cw " h" Ch " BackgroundTrans Hidden")   ; ancre de la case suivante
-    N += 1
-    return lb
+    for c in ctrls {
+        c.OnEvent("Click", (*) => action())
+        Bulles[c.Hwnd] := {info: info, ctrls: ctrls, couleur: couleur}
+    }
+    return v
 }
 
 Survol(wParam, lParam, msg, hwnd) {
-    static dernier := 0
-    if hwnd = dernier
+    static dernier := ""
+    nouveau := Bulles.Has(hwnd) ? Bulles[hwnd] : ""
+    if nouveau == dernier
         return
-    dernier := hwnd
-    ToolTip(Bulles.Has(hwnd) ? Bulles[hwnd] : "")
+    if IsObject(dernier)
+        for c in dernier.ctrls
+            c.SetFont("c" dernier.couleur)
+    if IsObject(nouveau)
+        for c in nouveau.ctrls
+            c.SetFont("c" Survole)
+    dernier := nouveau
+    ToolTip(IsObject(nouveau) ? nouveau.info : "")
 }
 
 MajPerf() {
@@ -670,7 +677,7 @@ MajPerf() {
     ram := NumGet(mem, 4, "UInt"), tot := NumGet(mem, 8, "UInt64"), dispo := NumGet(mem, 16, "UInt64")
     VCpu.Text := cpu " %"
     VRam.Text := ram " %"
-    Bulles[VRam.Hwnd] := "Mémoire : " Go(tot - dispo) " / " Go(tot) " — Gestionnaire des tâches"
+    Bulles[VRam.Hwnd].info := "Mémoire : " Go(tot - dispo) " / " Go(tot) " — Gestionnaire des tâches"
 }
 
 TempsCpu() {

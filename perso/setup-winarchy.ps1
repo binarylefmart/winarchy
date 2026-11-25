@@ -691,7 +691,13 @@ OuvrirDisque(d) => Lancer('explorer.exe "' d '"')
 
 Lancer(cmd) {
     g.Hide()
-    try Run(cmd, , "Hide")
+    ; winarchy est un .cmd : passé par cmd.exe (fenêtre cachée) ; le reste s'ouvre normalement.
+    try {
+        if SubStr(cmd, 1, 9) = "winarchy "
+            Run(A_ComSpec " /c " cmd, , "Hide")
+        else
+            Run(cmd)
+    }
     ExitApp
 }
 
@@ -2623,8 +2629,8 @@ PersoCrochetDevant() {
 ; les raccourcis qui visent la fenêtre active (caler, vers l'écran, réduire…) agissent
 ; sur elle. Super toujours tenu : on revole le focus pour la touche suivante. Super
 ; relâché : Ninja reprend le focus si rien d'autre ne l'a pris (Super seul : Flow).
-; Flèches : Ninja avale l'appui même sans le focus ; seul le relâchement arrive, et
-; PersoFlecheAvalee fait alors l'action (caler, vers l'écran, déplacer, focus).
+; Touches ordinaires (lettres, flèches…) : Ninja avale l'appui même sans le focus ; seul
+; le relâchement arrive, et PersoRejoue rejoue alors la touche pour que le raccourci parte.
 PersoRawInit()
 PersoRawInit() {
     global PersoLeurre := Gui('-Caption +ToolWindow +AlwaysOnTop')
@@ -2638,7 +2644,7 @@ PersoRawInit() {
 }
 PersoRawClavier(wParam, lParam, *) {
     global PersoNinja, PersoWinTenu, PersoAutreTouche, PersoSuperDepuis, PersoRaccourciFait
-    static alt := false, ctrl := false, maj := false, vus := Map()
+    static vus := Map()
     hdr := 8 + 2 * A_PtrSize                        ; RAWINPUTHEADER
     taille := 0
     DllCall('GetRawInputData', 'Ptr', lParam, 'UInt', 0x10000003, 'Ptr', 0, 'UInt*', &taille, 'UInt', hdr)
@@ -2652,31 +2658,32 @@ PersoRawClavier(wParam, lParam, *) {
     vk := NumGet(buf, hdr + 6, 'UShort')
     if !(vk = 0x5B || vk = 0x5C) {
         haut := NumGet(buf, hdr + 2, 'UShort') & 1
+        ; Relâchement de Super manqué : on se recale sur l'état réel.
+        if (PersoWinTenu && !GetKeyState('LWin', 'P') && !GetKeyState('RWin', 'P'))
+            PersoWinTenu := false
         switch vk {
-            case 0x12, 0xA4, 0xA5: alt := !haut
-            case 0x11, 0xA2, 0xA3: ctrl := !haut
-            case 0x10, 0xA0, 0xA1: maj := !haut
+            case 0x12, 0xA4, 0xA5, 0x11, 0xA2, 0xA3, 0x10, 0xA0, 0xA1, 0xE8, 0xFF:
+                return                              ; modificateurs (passent) et touches techniques
         }
-        ; Flèches : Ninja avale l'appui même quand il n'a plus le focus, seul le relâchement
-        ; passe. Relâchement sans appui vu, Super tenu sur Ninja : on fait l'action nous-mêmes.
-        if (vk >= 0x25 && vk <= 0x28) {
-            if !haut
-                vus[vk] := true
-            else {
-                if (PersoNinja && PersoWinTenu && !vus.Has(vk))
-                    SetTimer(PersoFlecheAvalee.Bind(['left', 'up', 'right', 'down'][vk - 0x24], alt, ctrl, maj), -250)
-                if vus.Has(vk)
-                    vus.Delete(vk)
-            }
+        if !haut {
+            vus[vk] := true
+            if PersoWinTenu
+                PersoAutreTouche := true            ; Super n'est plus « seul »
+            return
         }
-        if (PersoWinTenu && vk != 0xE8 && vk != 0xFF)   ; vkE8 : masque envoyé par PersoSuper
-            PersoAutreTouche := true                ; Super n'est plus « seul »
+        ; Ninja avale l'APPUI des touches ordinaires (lettres, flèches…) même sans le focus ;
+        ; seul le relâchement arrive. Relâchement sans appui vu, Super tenu sur Ninja : on
+        ; rejoue la touche (Ninja laisse passer les touches simulées) pour que le raccourci
+        ; normal parte.
+        if (PersoNinja && PersoWinTenu && !vus.Has(vk)) {
+            PersoAutreTouche := true
+            SetTimer(PersoRejoue.Bind(vk), -60)
+        }
+        if vus.Has(vk)
+            vus.Delete(vk)
         return
     }
     PersoWinTenu := !(NumGet(buf, hdr + 2, 'UShort') & 1)    ; RI_KEY_BREAK
-    if PersoWinTenu {                               ; état réel des modificateurs au début de l'appui
-        alt := GetKeyState('Alt', 'P'), ctrl := GetKeyState('Ctrl', 'P'), maj := GetKeyState('Shift', 'P')
-    }
     if (PersoWinTenu && !PersoNinja) {
         PersoAutreTouche := false, PersoSuperDepuis := A_TickCount, PersoRaccourciFait := false
         try PersoNinja := WinActive('ahk_exe ncplayer.exe')
@@ -2695,8 +2702,8 @@ PersoVole() {
 ; Évalué par AHK avant chaque raccourci perso : rend le premier plan à Ninja.
 PersoAvantRaccourci() {
     global PersoLeurre, PersoNinja, PersoDernierRacc
-    if (A_ThisHotkey ~= 'i)(Left|Right|Up|Down)$')
-        PersoDernierRacc := A_TickCount             ; le raccourci normal est passé : pas de doublon
+    if !(A_ThisHotkey ~= 'i)LWin')
+        PersoDernierRacc := A_TickCount             ; un raccourci est passé : pas de doublon
     if (PersoNinja && !(A_ThisHotkey ~= 'i)LWin') && WinActive('ahk_id ' PersoLeurre.Hwnd)) {
         global PersoRaccourciFait := true, PersoDernierRacc := A_TickCount
         DllCall('SetForegroundWindow', 'Ptr', PersoNinja)
@@ -2705,29 +2712,23 @@ PersoAvantRaccourci() {
     }
     return true
 }
-PersoFlecheAvalee(dir, alt, ctrl, maj) {
-    global PersoNinja, PersoLeurre, PersoRaccourciFait
-    global PersoDernierRacc
-    ; Un raccourci est déjà parti pour cette flèche (perso ou winarchy) : rien à faire.
-    if (A_TickCount - PersoDernierRacc < 600)
+PersoRejoue(vk) {
+    global PersoNinja, PersoDernierRacc, PersoRaccourciFait
+    nom := GetKeyName(Format('vk{:02X}', vk))
+    if (nom = '')
         return
-    if (A_PriorHotkey ~= 'i)(Left|Right|Up|Down)$' && A_TimeSincePriorHotkey != '' && A_TimeSincePriorHotkey < 600)
+    ; Un raccourci est déjà parti pour cette touche (l'appui était passé jusqu'à AHK) : rien.
+    if (A_TickCount - PersoDernierRacc < 500)
+        return
+    if (A_TimeSincePriorHotkey != '' && A_TimeSincePriorHotkey < 500
+        && SubStr(A_PriorHotkey, -StrLen(nom)) = nom)
         return
     if !PersoNinja || !WinExist('ahk_id ' PersoNinja)
         return
-    PersoRaccourciFait := true, PersoDernierRacc := A_TickCount
-    DllCall('SetForegroundWindow', 'Ptr', PersoNinja)
-    PersoLeurre.Hide()
-    Sleep(30)
-    if ctrl
-        PersoVersEcran(dir)
-    else if alt
-        PersoPlace(dir)
-    else if maj
-        PersoKomorebic('move ' dir)
-    else
-        PersoKomorebic('focus ' dir)
-    SetTimer(PersoRevole, -300)
+    PersoRaccourciFait := true
+    SendLevel(1)                                    ; pour déclencher nos propres raccourcis
+    Send('{Blind}{' nom '}')
+    SendLevel(0)
 }
 PersoRevole() {
     global PersoNinja, PersoWinTenu

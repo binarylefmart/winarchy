@@ -5,7 +5,7 @@
 ; le script, sinon tes changements sautent. Le #HotIf toujours vrai fait passer ces
 ; raccourcis devant ceux de winarchy.ahk, qui inclut ce fichier à la fin.
 InstallMouseHook()
-#HotIf true
+#HotIf PersoAvantRaccourci()   ; toujours vrai (passe devant winarchy.ahk) ; rend le focus à Ninja si besoin
 ; --- Perso : applis -----------------------------------------------------------
 #Backspace::PersoIci(), PersoClaude('foxis')                  ; Claude Code (Foxis)
 #+Backspace::PersoIci(), PersoClaudeBascule()                 ; Claude Desktop : ouvre / affiche / replie
@@ -961,13 +961,172 @@ PersoCrochetDevant() {
     try hwnd := WinActive('ahk_exe ncplayer.exe')
     catch
         hwnd := 0
-    if (hwnd && hwnd != dernier) {
-        InstallKeybdHook(true, true)
-        SetTimer(() => InstallKeybdHook(true, true), -700)   ; au cas où il le repose en retard
+    ; Ninja repose son crochet plus tard (clic dans la session, reconnexion) : tant qu'il est
+    ; au premier plan, on repasse devant toutes les secondes (et tout de suite au focus).
+    static compte := 0
+    if hwnd {
+        compte := (hwnd != dernier) ? 0 : compte + 1
+        if (hwnd != dernier || Mod(compte, 5) = 0)
+            InstallKeybdHook(true, true)
     }
     dernier := hwnd
 }
 
+; Ninja avale les touches ordinaires (journal : Super et Shift arrivent, les autres
+; jamais, pas même en Raw Input). Parade : on suit Super en Raw Input ; dès qu'il est
+; tenu sur Ninja, on lui retire le focus au profit d'une fenêtre invisible d'AHK, et la
+; touche suivante arrive aux raccourcis. Juste avant qu'un raccourci perso s'exécute
+; (#HotIf PersoAvantRaccourci, évalué avant l'action), Ninja reprend le premier plan :
+; les raccourcis qui visent la fenêtre active (caler, vers l'écran, réduire…) agissent
+; sur elle. Super toujours tenu : on revole le focus pour la touche suivante. Super
+; relâché : Ninja reprend le focus si rien d'autre ne l'a pris (Super seul : Flow).
+; Flèches : Ninja avale l'appui même sans le focus ; seul le relâchement arrive, et
+; PersoFlecheAvalee fait alors l'action (caler, vers l'écran, déplacer, focus).
+PersoRawInit()
+PersoRawInit() {
+    global PersoLeurre := Gui('-Caption +ToolWindow +AlwaysOnTop')
+    global PersoNinja := 0, PersoWinTenu := false, PersoAutreTouche := false, PersoSuperDepuis := 0, PersoRaccourciFait := false, PersoDernierRacc := 0
+    PersoLeurre.BackColor := '000000'
+    PersoLeurre.Show('x0 y0 w1 h1 NoActivate Hide')
+    rid := Buffer(8 + A_PtrSize, 0)                 ; RAWINPUTDEVICE
+    NumPut('UShort', 1, 'UShort', 6, 'UInt', 0x100, 'Ptr', PersoLeurre.Hwnd, rid)   ; clavier, INPUTSINK
+    DllCall('RegisterRawInputDevices', 'Ptr', rid, 'UInt', 1, 'UInt', rid.Size)
+    OnMessage(0x00FF, PersoRawClavier)              ; WM_INPUT
+}
+PersoRawClavier(wParam, lParam, *) {
+    global PersoNinja, PersoWinTenu, PersoAutreTouche, PersoSuperDepuis, PersoRaccourciFait
+    static alt := false, ctrl := false, maj := false, vus := Map()
+    hdr := 8 + 2 * A_PtrSize                        ; RAWINPUTHEADER
+    taille := 0
+    DllCall('GetRawInputData', 'Ptr', lParam, 'UInt', 0x10000003, 'Ptr', 0, 'UInt*', &taille, 'UInt', hdr)
+    if !taille
+        return
+    buf := Buffer(taille, 0)
+    if (DllCall('GetRawInputData', 'Ptr', lParam, 'UInt', 0x10000003, 'Ptr', buf, 'UInt*', &taille, 'UInt', hdr) <= 0)
+        return
+    if (NumGet(buf, 0, 'UInt') != 1)                ; RIM_TYPEKEYBOARD
+        return
+    vk := NumGet(buf, hdr + 6, 'UShort')
+    if !(vk = 0x5B || vk = 0x5C) {
+        haut := NumGet(buf, hdr + 2, 'UShort') & 1
+        if PersoWinTenu
+            try PersoDiag('raw vk=' Format('0x{:02X}', vk) (haut ? ' haut' : ' bas') ' fg=' WinGetProcessName('A'))
+        switch vk {
+            case 0x12, 0xA4, 0xA5: alt := !haut
+            case 0x11, 0xA2, 0xA3: ctrl := !haut
+            case 0x10, 0xA0, 0xA1: maj := !haut
+        }
+        ; Flèches : Ninja avale l'appui même quand il n'a plus le focus, seul le relâchement
+        ; passe. Relâchement sans appui vu, Super tenu sur Ninja : on fait l'action nous-mêmes.
+        if (vk >= 0x25 && vk <= 0x28) {
+            if !haut
+                vus[vk] := true
+            else {
+                if (PersoNinja && PersoWinTenu && !vus.Has(vk))
+                    SetTimer(PersoFlecheAvalee.Bind(['left', 'up', 'right', 'down'][vk - 0x24], alt, ctrl, maj), -250)
+                if vus.Has(vk)
+                    vus.Delete(vk)
+            }
+        }
+        if (PersoWinTenu && vk != 0xE8 && vk != 0xFF)   ; vkE8 : masque envoyé par PersoSuper
+            PersoAutreTouche := true                ; Super n'est plus « seul »
+        return
+    }
+    PersoWinTenu := !(NumGet(buf, hdr + 2, 'UShort') & 1)    ; RI_KEY_BREAK
+    try PersoDiag('raw Win ' (PersoWinTenu ? 'bas' : 'haut') ' ninja=' PersoNinja ' fg=' WinGetProcessName('A'))
+    if PersoWinTenu {                               ; état réel des modificateurs au début de l'appui
+        alt := GetKeyState('Alt', 'P'), ctrl := GetKeyState('Ctrl', 'P'), maj := GetKeyState('Shift', 'P')
+    }
+    if (PersoWinTenu && !PersoNinja) {
+        PersoAutreTouche := false, PersoSuperDepuis := A_TickCount, PersoRaccourciFait := false
+        try PersoNinja := WinActive('ahk_exe ncplayer.exe')
+        if PersoNinja
+            PersoVole()
+    } else if (!PersoWinTenu && PersoNinja) {
+        SetTimer(PersoRendNinja, -200)              ; laisse le raccourci (ou Démarrer) agir
+    }
+}
+PersoVole() {
+    global PersoLeurre
+    PersoLeurre.Show('x0 y0 w1 h1')
+    if !DllCall('SetForegroundWindow', 'Ptr', PersoLeurre.Hwnd) || !WinActive('ahk_id ' PersoLeurre.Hwnd)
+        try WinActivate(PersoLeurre.Hwnd)
+}
+; Évalué par AHK avant chaque raccourci perso : rend le premier plan à Ninja.
+PersoAvantRaccourci() {
+    global PersoLeurre, PersoNinja, PersoDernierRacc
+    if (A_ThisHotkey ~= 'i)(Left|Right|Up|Down)$')
+        PersoDernierRacc := A_TickCount             ; le raccourci normal est passé : pas de doublon
+    if (PersoNinja && !(A_ThisHotkey ~= 'i)LWin') && WinActive('ahk_id ' PersoLeurre.Hwnd)) {
+        global PersoRaccourciFait := true, PersoDernierRacc := A_TickCount
+        DllCall('SetForegroundWindow', 'Ptr', PersoNinja)
+        PersoLeurre.Hide()
+        SetTimer(PersoRevole, -300)
+    }
+    return true
+}
+PersoFlecheAvalee(dir, alt, ctrl, maj) {
+    global PersoNinja, PersoLeurre, PersoRaccourciFait
+    global PersoDernierRacc
+    ; Un raccourci est déjà parti pour cette flèche (perso ou winarchy) : rien à faire.
+    if (A_TickCount - PersoDernierRacc < 600)
+        return
+    if (A_PriorHotkey ~= 'i)(Left|Right|Up|Down)$' && A_TimeSincePriorHotkey != '' && A_TimeSincePriorHotkey < 600)
+        return
+    if !PersoNinja || !WinExist('ahk_id ' PersoNinja)
+        return
+    PersoRaccourciFait := true, PersoDernierRacc := A_TickCount
+    DllCall('SetForegroundWindow', 'Ptr', PersoNinja)
+    PersoLeurre.Hide()
+    Sleep(30)
+    if ctrl
+        PersoVersEcran(dir)
+    else if alt
+        PersoPlace(dir)
+    else if maj
+        PersoKomorebic('move ' dir)
+    else
+        PersoKomorebic('focus ' dir)
+    SetTimer(PersoRevole, -300)
+}
+PersoDiag(m) {
+    try FileAppend(FormatTime(, 'HH:mm:ss') '.' A_MSec '  ' m '`n', A_Temp '\winarchy-perso-ninja.log', 'UTF-8')
+}
+PersoRevole() {
+    global PersoNinja, PersoWinTenu
+    if (PersoWinTenu && PersoNinja && WinActive('ahk_id ' PersoNinja))
+        PersoVole()                                 ; Super toujours tenu : prêt pour la touche suivante
+}
+PersoRendNinja() {
+    global PersoLeurre, PersoNinja, PersoWinTenu
+    if (PersoWinTenu || !PersoNinja)
+        return
+    h := PersoNinja
+    encore := WinActive('ahk_id ' PersoLeurre.Hwnd)
+    PersoNinja := 0
+    PersoLeurre.Hide()
+    ; Super seul (court, sans autre touche) : le « LWin up » de winarchy ne part pas pendant
+    ; la parade, on ouvre Flow nous-mêmes comme PersoSuper.
+    global PersoAutreTouche, PersoSuperDepuis, PersoRaccourciFait
+    if (encore && !PersoAutreTouche && !PersoRaccourciFait && A_TickCount - PersoSuperDepuis < 700) {
+        PersoIci(), PersoFlowDereduit(), ToggleFlow()
+        return
+    }
+    if encore                                       ; personne n'a pris le focus : retour à Ninja
+        try WinActivate(h)
+}
+#HotIf PersoAvantRaccourci()
+; Super+W pendant la parade : fermer Ninja explicitement (WinExist('A') peut encore
+; désigner la fenêtre invisible au moment où le raccourci s'exécute).
+#w:: {
+    global PersoNinja
+    try PersoDiag('#w ninja=' PersoNinja ' fg=' WinGetProcessName('A'))
+    if (PersoNinja && WinExist('ahk_id ' PersoNinja))
+        PostMessage(0x0010, 0, 0, , 'ahk_id ' PersoNinja)   ; WM_CLOSE
+    else
+        CloseWindow()
+}
+#HotIf
 ; --- Boîtes de dialogue et installeurs toujours devant --------------------------
 ; Dans un script à part (~\.winarchy-perso\devant.ahk, écrit par setup-winarchy.ps1),
 ; lancé avec AutoHotkey64_UIA.exe (UI Access) : sans ça Windows interdit de mettre

@@ -24,7 +24,7 @@
 
   Réglages dans les modèles de Winarchy (repatchés à chaque lancement) :
         Fenêtre seule en pleine largeur par défaut (Super+F la centre)
-        Barre YASB : groupes toujours dépliés, sans compteur Codex
+        Barre YASB : sans compteur Codex ; CPU, RAM, disques et outils peu utilisés dans la bulle ▾ ; bureaux vides masqués
         Barre YASB : icônes de la zone de notification renvoyées à chaque redémarrage de YASB
         komorebi : tout est tilé (ShareX, Gestionnaire des tâches, Panneau de configuration, applis
           ignorées ou flottantes de la liste communautaire ASC, lanceurs de jeux) ; 4 écrans décrits
@@ -549,6 +549,200 @@ Send '#v'
     Ok "Lanceur presse-papiers (Win+V) : $ahk"
 }
 
+# Bulle « en plus » de la barre YASB (bouton ▾, comme le systray) : CPU, RAM, disques et outils
+# peu utilisés, retirés de la barre faute de place. YASB ne sait pas faire déborder les widgets
+# qui ne tiennent pas : la bulle a un contenu fixe. Données lues en direct par AHK (pas de PowerShell).
+function Write-PlusBulle {
+    $ahk = Join-Path $Perso 'plus-bulle.ahk'
+    New-Item -ItemType Directory -Force $Perso | Out-Null
+    Write-Utf8Bom $ahk @'
+#Requires AutoHotkey v2.0
+#SingleInstance Off
+#NoTrayIcon
+; Bulle « en plus » sous la barre YASB (bouton ▾) : écrit par setup-winarchy.ps1, ne pas modifier ici.
+; CPU / RAM (rafraîchis toutes les 2 s), disques, outils. Reclic sur ▾ ou clic ailleurs = fermer.
+
+Dossier := A_ScriptDir
+Fond := "0c0a12", Texte := "eee2d8", Accent := "f25a00", Rouge := "e0435a", Gris := "9a8a94", Bouton := "2a1d26"
+L := 300
+
+if WinExist("PlusBulle ahk_class AutoHotkeyGUI") {
+    WinClose
+    ExitApp
+}
+if FermeeRecemment()
+    ExitApp
+
+CoordMode "Mouse", "Screen"
+MouseGetPos &SourisX, &SourisY
+PrecCpu := TempsCpu()
+
+g := Gui("+AlwaysOnTop -Caption +ToolWindow +Border", "PlusBulle")
+g.BackColor := Fond
+g.MarginX := 16, g.MarginY := 12
+g.OnEvent("Close", (*) => ExitApp())
+g.OnEvent("Escape", (*) => Fermer())
+
+; --- Performances (clic = Gestionnaire des tâches) ---
+Section("PERFORMANCES", "xm")
+LCpu := Ligne("CPU", "…", () => Lancer("taskmgr.exe"))
+BCpu := Barre()
+LRam := Ligne("RAM", "…", () => Lancer("taskmgr.exe"))
+BRam := Barre()
+
+; --- Disques (clic = ouvrir le disque) ---
+Section("DISQUES")
+for genre in ["FIXED", "NETWORK"] {
+    try lettres := DriveGetList(genre)
+    catch
+        continue
+    Loop Parse lettres {
+        d := A_LoopField ":\"
+        try {
+            if DriveGetStatus(d) != "Ready"
+                continue
+            total := DriveGetCapacity(d), libre := DriveGetSpaceFree(d)
+            if total <= 0
+                continue
+            nom := DriveGetLabel(d)
+        } catch
+            continue
+        pct := Round((total - libre) * 100 / total)
+        Ligne(A_LoopField ":  " (nom != "" ? nom : genre = "NETWORK" ? "Réseau" : "Local"),
+            pct " %  ·  " Go(libre) " libres", OuvrirDisque.Bind(d), pct >= 90)
+        Barre(pct, genre = "NETWORK" ? "56b6c2" : "")
+    }
+}
+
+; --- Outils ---
+Section("OUTILS")
+w := (L - 8) // 2
+Outils := [
+    ["Texte de l'écran (OCR)", "winarchy screenshot ocr"],
+    ["Lire un QR code", "winarchy screenshot qr"],
+    ["Pipette", "winarchy screenshot color"],
+    ["Corbeille", "explorer.exe shell:RecycleBinFolder"],
+    ["Plan d'alimentation", "control.exe powercfg.cpl"],
+    ["Ce PC", "explorer.exe shell:MyComputerFolder"],
+]
+for i, o in Outils
+    AjouterBouton((Mod(i, 2) ? "xm y+8" : "x+8 yp") " w" w, o[1], Lancer.Bind(o[2]))
+g.AddText("xm y+4 w1 h1")   ; marge du bas
+
+MajPerf()
+Afficher()
+SetTimer(MajPerf, 2000)
+SetTimer(ClicDehors, 50)
+
+Section(titre, pos := "xm y+16") {
+    g.SetFont("s8 bold c" Gris, "Segoe UI")
+    g.AddText(pos " w" L, titre)
+}
+
+; Nom à gauche, valeur à droite (rouge si alerte) ; toute la ligne est cliquable.
+Ligne(nom, valeur, action, alerte := false) {
+    g.SetFont("s10 norm c" Texte, "Segoe UI")
+    n := g.AddText("xm y+6 w110", nom)
+    g.SetFont("s10 " (alerte ? "bold" : "norm") " c" (alerte ? Rouge : Accent))
+    v := g.AddText("x+0 yp w" (L - 110) " Right", valeur)
+    n.OnEvent("Click", (*) => action())
+    v.OnEvent("Click", (*) => action())
+    return v
+}
+
+Barre(pct := 0, couleur := "") {
+    return g.AddProgress("xm y+3 w" L " h4 c" (couleur != "" ? couleur : pct >= 90 ? Rouge : Accent) " Background" Bouton, pct)
+}
+
+AjouterBouton(opts, libelle, action) {
+    g.SetFont("s9 norm c" Texte, "Segoe UI")
+    b := g.AddText(opts " h28 Center 0x200 Background" Bouton, libelle)   ; 0x200 = centré verticalement
+    b.OnEvent("Click", (*) => action())
+}
+
+MajPerf() {
+    global PrecCpu
+    t := TempsCpu()
+    total := (t.noyau - PrecCpu.noyau) + (t.user - PrecCpu.user)
+    cpu := total > 0 ? Round((total - (t.idle - PrecCpu.idle)) * 100 / total) : 0
+    PrecCpu := t
+    mem := Buffer(64, 0)
+    NumPut("UInt", 64, mem)
+    DllCall("GlobalMemoryStatusEx", "Ptr", mem)
+    ram := NumGet(mem, 4, "UInt"), tot := NumGet(mem, 8, "UInt64"), dispo := NumGet(mem, 16, "UInt64")
+    LCpu.Text := cpu " %"
+    BCpu.Value := cpu
+    LRam.Text := ram " %  ·  " Go(tot - dispo) " / " Go(tot)
+    BRam.Value := ram
+}
+
+TempsCpu() {
+    DllCall("GetSystemTimes", "Int64*", &idle := 0, "Int64*", &noyau := 0, "Int64*", &user := 0)
+    return {idle: idle, noyau: noyau, user: user}
+}
+
+; Mo (DriveGet*) ou octets (mémoire) -> « 12,3 Go » / « 1,2 To ».
+Go(v) {
+    go := v > 1e7 ? v / 1073741824 : v / 1024
+    return go >= 1000 ? StrReplace(Format("{:.1f}", go / 1024), ".", ",") " To" : StrReplace(Format("{:.1f}", go), ".", ",") " Go"
+}
+
+OuvrirDisque(d) => Lancer('explorer.exe "' d '"')
+
+Lancer(cmd) {
+    g.Hide()
+    try Run(cmd, , "Hide")
+    ExitApp
+}
+
+ClicDehors() {
+    static avant := true   ; bouton déjà enfoncé à l'ouverture : le clic qui a ouvert la bulle
+    bas := GetKeyState("LButton", "P") || GetKeyState("RButton", "P")
+    if bas && !avant {
+        MouseGetPos , , &sous
+        if sous != g.Hwnd
+            Fermer()
+    }
+    avant := bas
+}
+
+Fermer() {
+    f := Dossier "\plus-bulle.ferme"
+    try FileDelete(f)
+    try FileAppend(DllCall("GetTickCount64", "Int64"), f)
+    ExitApp
+}
+
+FermeeRecemment() {
+    try return DllCall("GetTickCount64", "Int64") - Integer(FileRead(Dossier "\plus-bulle.ferme")) < 1500
+    return false
+}
+
+; Sous la barre, bord droit aligné sur la souris (comme le popup du systray), dans l'écran.
+Afficher() {
+    n := MonitorGetPrimary()
+    Loop MonitorGetCount() {
+        MonitorGet(A_Index, &l, &t, &r, &b)
+        if SourisX >= l && SourisX < r && SourisY >= t && SourisY < b
+            n := A_Index
+    }
+    MonitorGetWorkArea(n, &l, &t, &r, &b)
+    g.Show("Hide AutoSize")
+    DllCall("dwmapi\DwmSetWindowAttribute", "Ptr", g.Hwnd, "UInt", 33, "Int*", 2, "UInt", 4)
+    DllCall("dwmapi\DwmSetWindowAttribute", "Ptr", g.Hwnd, "UInt", 34, "UInt*", Bgr("55404c"), "UInt", 4)
+    g.GetPos(, , &w)
+    x := Max(l + 6, Min(SourisX + 20 - w, r - w - 6))
+    g.Show("x" x " y" (t + 6))
+}
+
+Bgr(hex) {
+    v := Integer("0x" hex)
+    return ((v & 0xFF) << 16) | (v & 0xFF00) | ((v >> 16) & 0xFF)
+}
+'@
+    Ok "Bulle « en plus » de la barre : $ahk"
+}
+
 # Clic du milieu = coller (Ctrl+V), lancé à chaque ouverture de session (dossier Démarrage).
 # Hors du bloc user.ahk : script indépendant, comme sur le poste d'origine.
 function Install-ColleClicMilieu([bool]$actif) {
@@ -808,10 +1002,10 @@ function Get-Jour([datetime]$d) {
 $suivant = $horaires | Where-Object { $_.debut -gt $maintenant.AddMinutes(-5) } | Select-Object -First 1
 if ($suivant -and ($suivant.debut - $maintenant).TotalMinutes -le $avance) {
     $m = [math]::Ceiling(($suivant.debut - $maintenant).TotalMinutes)
-    $barre = "$icAlerte $(if ($m -gt 0) { "dans $m min" } else { 'maintenant' }) · $(Get-Court $suivant.sujet)"
+    $barre = "$icAlerte $(if ($m -gt 0) { "dans $m min" } else { 'maintenant' }) · $(Get-Court $suivant.sujet 18)"
     $alt = $barre + $(if ($suivant.lieu) { " · $(Get-Court $suivant.lieu 30)" })
 } elseif ($suivant) {
-    $barre = "$icCal $(Get-Jour $suivant.debut)$($suivant.debut.ToString('HH:mm')) $(Get-Court $suivant.sujet)"
+    $barre = "$icCal $(Get-Jour $suivant.debut)$($suivant.debut.ToString('HH:mm')) $(Get-Court $suivant.sujet 18)"
     $alt = $barre + $(if ($suivant.lieu) { " · $(Get-Court $suivant.lieu 30)" })
 } else { $barre = $icVide; $alt = "$icVide rien à venir" }
 
@@ -1438,6 +1632,7 @@ function Install-Raccourcis([string]$Root) {
     Write-ClaudeLauncher
     Write-ScreenpressoLauncher
     Write-PressePapiersLauncher
+    Write-PlusBulle
     Write-LanceurAppsLauncher
     Write-DisquesScript
     Write-RdvScript
@@ -1452,7 +1647,7 @@ function Install-Raccourcis([string]$Root) {
 ; le script, sinon tes changements sautent. Le #HotIf toujours vrai fait passer ces
 ; raccourcis devant ceux de winarchy.ahk, qui inclut ce fichier à la fin.
 InstallMouseHook()
-#HotIf true
+#HotIf PersoAvantRaccourci()   ; toujours vrai (passe devant winarchy.ahk) ; rend le focus à Ninja si besoin
 ; --- Perso : applis -----------------------------------------------------------
 #Backspace::PersoIci(), PersoClaude('foxis')                  ; Claude Code (Foxis)
 #+Backspace::PersoIci(), PersoClaudeBascule()                 ; Claude Desktop : ouvre / affiche / replie
@@ -2409,13 +2604,165 @@ PersoCrochetDevant() {
     try hwnd := WinActive('ahk_exe ncplayer.exe')
     catch
         hwnd := 0
-    if (hwnd && hwnd != dernier) {
-        InstallKeybdHook(true, true)
-        SetTimer(() => InstallKeybdHook(true, true), -700)   ; au cas où il le repose en retard
+    ; Ninja repose son crochet plus tard (clic dans la session, reconnexion) : tant qu'il est
+    ; au premier plan, on repasse devant toutes les secondes (et tout de suite au focus).
+    static compte := 0
+    if hwnd {
+        compte := (hwnd != dernier) ? 0 : compte + 1
+        if (hwnd != dernier || Mod(compte, 5) = 0)
+            InstallKeybdHook(true, true)
     }
     dernier := hwnd
 }
 
+; Ninja avale les touches ordinaires (journal : Super et Shift arrivent, les autres
+; jamais, pas même en Raw Input). Parade : on suit Super en Raw Input ; dès qu'il est
+; tenu sur Ninja, on lui retire le focus au profit d'une fenêtre invisible d'AHK, et la
+; touche suivante arrive aux raccourcis. Juste avant qu'un raccourci perso s'exécute
+; (#HotIf PersoAvantRaccourci, évalué avant l'action), Ninja reprend le premier plan :
+; les raccourcis qui visent la fenêtre active (caler, vers l'écran, réduire…) agissent
+; sur elle. Super toujours tenu : on revole le focus pour la touche suivante. Super
+; relâché : Ninja reprend le focus si rien d'autre ne l'a pris (Super seul : Flow).
+; Flèches : Ninja avale l'appui même sans le focus ; seul le relâchement arrive, et
+; PersoFlecheAvalee fait alors l'action (caler, vers l'écran, déplacer, focus).
+PersoRawInit()
+PersoRawInit() {
+    global PersoLeurre := Gui('-Caption +ToolWindow +AlwaysOnTop')
+    global PersoNinja := 0, PersoWinTenu := false, PersoAutreTouche := false, PersoSuperDepuis := 0, PersoRaccourciFait := false, PersoDernierRacc := 0
+    PersoLeurre.BackColor := '000000'
+    PersoLeurre.Show('x0 y0 w1 h1 NoActivate Hide')
+    rid := Buffer(8 + A_PtrSize, 0)                 ; RAWINPUTDEVICE
+    NumPut('UShort', 1, 'UShort', 6, 'UInt', 0x100, 'Ptr', PersoLeurre.Hwnd, rid)   ; clavier, INPUTSINK
+    DllCall('RegisterRawInputDevices', 'Ptr', rid, 'UInt', 1, 'UInt', rid.Size)
+    OnMessage(0x00FF, PersoRawClavier)              ; WM_INPUT
+}
+PersoRawClavier(wParam, lParam, *) {
+    global PersoNinja, PersoWinTenu, PersoAutreTouche, PersoSuperDepuis, PersoRaccourciFait
+    static alt := false, ctrl := false, maj := false, vus := Map()
+    hdr := 8 + 2 * A_PtrSize                        ; RAWINPUTHEADER
+    taille := 0
+    DllCall('GetRawInputData', 'Ptr', lParam, 'UInt', 0x10000003, 'Ptr', 0, 'UInt*', &taille, 'UInt', hdr)
+    if !taille
+        return
+    buf := Buffer(taille, 0)
+    if (DllCall('GetRawInputData', 'Ptr', lParam, 'UInt', 0x10000003, 'Ptr', buf, 'UInt*', &taille, 'UInt', hdr) <= 0)
+        return
+    if (NumGet(buf, 0, 'UInt') != 1)                ; RIM_TYPEKEYBOARD
+        return
+    vk := NumGet(buf, hdr + 6, 'UShort')
+    if !(vk = 0x5B || vk = 0x5C) {
+        haut := NumGet(buf, hdr + 2, 'UShort') & 1
+        switch vk {
+            case 0x12, 0xA4, 0xA5: alt := !haut
+            case 0x11, 0xA2, 0xA3: ctrl := !haut
+            case 0x10, 0xA0, 0xA1: maj := !haut
+        }
+        ; Flèches : Ninja avale l'appui même quand il n'a plus le focus, seul le relâchement
+        ; passe. Relâchement sans appui vu, Super tenu sur Ninja : on fait l'action nous-mêmes.
+        if (vk >= 0x25 && vk <= 0x28) {
+            if !haut
+                vus[vk] := true
+            else {
+                if (PersoNinja && PersoWinTenu && !vus.Has(vk))
+                    SetTimer(PersoFlecheAvalee.Bind(['left', 'up', 'right', 'down'][vk - 0x24], alt, ctrl, maj), -250)
+                if vus.Has(vk)
+                    vus.Delete(vk)
+            }
+        }
+        if (PersoWinTenu && vk != 0xE8 && vk != 0xFF)   ; vkE8 : masque envoyé par PersoSuper
+            PersoAutreTouche := true                ; Super n'est plus « seul »
+        return
+    }
+    PersoWinTenu := !(NumGet(buf, hdr + 2, 'UShort') & 1)    ; RI_KEY_BREAK
+    if PersoWinTenu {                               ; état réel des modificateurs au début de l'appui
+        alt := GetKeyState('Alt', 'P'), ctrl := GetKeyState('Ctrl', 'P'), maj := GetKeyState('Shift', 'P')
+    }
+    if (PersoWinTenu && !PersoNinja) {
+        PersoAutreTouche := false, PersoSuperDepuis := A_TickCount, PersoRaccourciFait := false
+        try PersoNinja := WinActive('ahk_exe ncplayer.exe')
+        if PersoNinja
+            PersoVole()
+    } else if (!PersoWinTenu && PersoNinja) {
+        SetTimer(PersoRendNinja, -200)              ; laisse le raccourci (ou Démarrer) agir
+    }
+}
+PersoVole() {
+    global PersoLeurre
+    PersoLeurre.Show('x0 y0 w1 h1')
+    if !DllCall('SetForegroundWindow', 'Ptr', PersoLeurre.Hwnd) || !WinActive('ahk_id ' PersoLeurre.Hwnd)
+        try WinActivate(PersoLeurre.Hwnd)
+}
+; Évalué par AHK avant chaque raccourci perso : rend le premier plan à Ninja.
+PersoAvantRaccourci() {
+    global PersoLeurre, PersoNinja, PersoDernierRacc
+    if (A_ThisHotkey ~= 'i)(Left|Right|Up|Down)$')
+        PersoDernierRacc := A_TickCount             ; le raccourci normal est passé : pas de doublon
+    if (PersoNinja && !(A_ThisHotkey ~= 'i)LWin') && WinActive('ahk_id ' PersoLeurre.Hwnd)) {
+        global PersoRaccourciFait := true, PersoDernierRacc := A_TickCount
+        DllCall('SetForegroundWindow', 'Ptr', PersoNinja)
+        PersoLeurre.Hide()
+        SetTimer(PersoRevole, -300)
+    }
+    return true
+}
+PersoFlecheAvalee(dir, alt, ctrl, maj) {
+    global PersoNinja, PersoLeurre, PersoRaccourciFait
+    global PersoDernierRacc
+    ; Un raccourci est déjà parti pour cette flèche (perso ou winarchy) : rien à faire.
+    if (A_TickCount - PersoDernierRacc < 600)
+        return
+    if (A_PriorHotkey ~= 'i)(Left|Right|Up|Down)$' && A_TimeSincePriorHotkey != '' && A_TimeSincePriorHotkey < 600)
+        return
+    if !PersoNinja || !WinExist('ahk_id ' PersoNinja)
+        return
+    PersoRaccourciFait := true, PersoDernierRacc := A_TickCount
+    DllCall('SetForegroundWindow', 'Ptr', PersoNinja)
+    PersoLeurre.Hide()
+    Sleep(30)
+    if ctrl
+        PersoVersEcran(dir)
+    else if alt
+        PersoPlace(dir)
+    else if maj
+        PersoKomorebic('move ' dir)
+    else
+        PersoKomorebic('focus ' dir)
+    SetTimer(PersoRevole, -300)
+}
+PersoRevole() {
+    global PersoNinja, PersoWinTenu
+    if (PersoWinTenu && PersoNinja && WinActive('ahk_id ' PersoNinja))
+        PersoVole()                                 ; Super toujours tenu : prêt pour la touche suivante
+}
+PersoRendNinja() {
+    global PersoLeurre, PersoNinja, PersoWinTenu
+    if (PersoWinTenu || !PersoNinja)
+        return
+    h := PersoNinja
+    encore := WinActive('ahk_id ' PersoLeurre.Hwnd)
+    PersoNinja := 0
+    PersoLeurre.Hide()
+    ; Super seul (court, sans autre touche) : le « LWin up » de winarchy ne part pas pendant
+    ; la parade, on ouvre Flow nous-mêmes comme PersoSuper.
+    global PersoAutreTouche, PersoSuperDepuis, PersoRaccourciFait
+    if (encore && !PersoAutreTouche && !PersoRaccourciFait && A_TickCount - PersoSuperDepuis < 700) {
+        PersoIci(), PersoFlowDereduit(), ToggleFlow()
+        return
+    }
+    if encore                                       ; personne n'a pris le focus : retour à Ninja
+        try WinActivate(h)
+}
+#HotIf PersoAvantRaccourci()
+; Super+W pendant la parade : fermer Ninja explicitement (WinExist('A') peut encore
+; désigner la fenêtre invisible au moment où le raccourci s'exécute).
+#w:: {
+    global PersoNinja
+    if (PersoNinja && WinExist('ahk_id ' PersoNinja))
+        PostMessage(0x0010, 0, 0, , 'ahk_id ' PersoNinja)   ; WM_CLOSE
+    else
+        CloseWindow()
+}
+#HotIf
 ; --- Boîtes de dialogue et installeurs toujours devant --------------------------
 ; Dans un script à part (~\.winarchy-perso\devant.ahk, écrit par setup-winarchy.ps1),
 ; lancé avec AutoHotkey64_UIA.exe (UI Access) : sans ça Windows interdit de mettre
@@ -2512,6 +2859,30 @@ function Set-SurveillanceBarre([string]$Root, [bool]$active) {
     Register-ScheduledTask -TaskName $nom -TaskPath $dossier -Action $action -Trigger $trigger -Settings $reglages -Principal $principal -Force | Out-Null
     Start-ScheduledTask -TaskName $nom -TaskPath $dossier
     Ok 'Surveillance de la zone de la barre YASB active (tâche \Winarchy\yasb-zone)'
+}
+
+# Surveillance des écrans (perso\Watch-Ecrans.ps1) : au retrait d'un écran, ramène et
+# dé-réduit les fenêtres ; au branchement, répartit le surplus sur les nouveaux écrans.
+function Set-SurveillanceEcrans([string]$Root, [bool]$active) {
+    $nom = 'ecrans'; $dossier = '\Winarchy\'
+    if (-not $active) {
+        if (Get-ScheduledTask -TaskName $nom -TaskPath $dossier -ErrorAction SilentlyContinue) {
+            Stop-ScheduledTask -TaskName $nom -TaskPath $dossier -ErrorAction SilentlyContinue
+            Unregister-ScheduledTask -TaskName $nom -TaskPath $dossier -Confirm:$false
+            Ok 'Surveillance des écrans retirée'
+        }
+        return
+    }
+    $script = Join-Path $Root 'perso\Watch-Ecrans.ps1'
+    if (-not (Test-Path $script)) { Warn "Surveillance des écrans non installée : $script introuvable"; return }
+    $action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$script`""
+    $trigger = New-ScheduledTaskTrigger -AtLogOn -User "$env:USERDOMAIN\$env:USERNAME"
+    $trigger.Delay = 'PT30S'
+    $reglages = New-ScheduledTaskSettingsSet -ExecutionTimeLimit ([TimeSpan]::Zero) -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -MultipleInstances IgnoreNew
+    $principal = New-ScheduledTaskPrincipal -UserId "$env:USERDOMAIN\$env:USERNAME" -LogonType Interactive -RunLevel Limited
+    Register-ScheduledTask -TaskName $nom -TaskPath $dossier -Action $action -Trigger $trigger -Settings $reglages -Principal $principal -Force | Out-Null
+    Start-ScheduledTask -TaskName $nom -TaskPath $dossier
+    Ok 'Surveillance des écrans active (tâche \Winarchy\ecrans)'
 }
 
 function Get-ThemeActif([string]$Root) {
@@ -2734,7 +3105,8 @@ function Edit-ModeleYasb([string]$t) {
     $t = [regex]::Replace($t, '(?m)^  # Disques[^\n]*\n(?:  #[^\n]*\n)*  disques(?:_reseau)?:\r?\n(?:(?:    [^\n]*)?\r?\n)*', '')
     $t = $t.Replace(', "disques_reseau"', '').Replace(', "disques"', '')
     # Directement dans la barre après le groupe système (même écart qu'entre les groupes).
-    if ($t -notmatch '"system", ' -or $t -notmatch '(?m)^  memory:') { throw 'ancre disques absente' }
+    # (ancre : "plus" si la bulle « en plus », plus bas, a déjà remplacé system + disques)
+    if ($t -notmatch '"(system|plus)", ' -or $t -notmatch '(?m)^  memory:') { throw 'ancre disques absente' }
     $t = $t.Replace('"system", ', '"system", "disques", ')
     # Barre complète trop chargée pour 1920 px : sans titre de fenêtre active ni météo
     # (disques réseau non plus, voir juste au-dessus ; le widget reste défini).
@@ -2914,7 +3286,7 @@ function Edit-ModeleYasb([string]$t) {
     widgets:
       left: ["home", "komorebi_workspaces", "taskbar"]
       center: ["clock"]
-      right: ["ai", "system", "disques", "connections", "volume", "battery", "notifications", "systray", "winarchy_menu"]
+      right: ["ai", "plus", "connections", "volume", "battery", "notifications", "systray", "winarchy_menu"]
     layouts:
       left:
         alignment: "left"
@@ -2931,7 +3303,7 @@ function Edit-ModeleYasb([string]$t) {
     }
     # Widgets de droite de la barre laptop (tenus à jour même si le bloc existe déjà) :
     # tokens Claude, perf (CPU/GPU/RAM), disques, puis l'essentiel.
-    $t = [regex]::Replace($t, '(?s)(  laptop-bar:.*?\r?\n      right: )\[[^\]]*\]', '${1}["ai", "system", "disques", "connections", "volume", "battery", "notifications", "systray", "winarchy_menu"]', 1)
+    $t = [regex]::Replace($t, '(?s)(  laptop-bar:.*?\r?\n      right: )\[[^\]]*\]', '${1}["ai", "plus", "connections", "volume", "battery", "notifications", "systray", "winarchy_menu"]', 1)
     # Rendez-vous Outlook à droite de l'horloge, sur les deux barres. Bloc reconstruit à chaque passage.
     if ($t -notmatch '(?m)^  clock:') { throw 'ancre rdv absente' }
     $t = [regex]::Replace($t, '(?ms)^  # Rendez-vous Outlook \(perso.*?(?=^  clock:)', '')
@@ -2963,6 +3335,36 @@ function Edit-ModeleYasb([string]$t) {
         on_left: "exec cmd.exe /c start outlook.exe /select outlook:calendar"
         on_middle: "exec_custom"
         on_right: "exec cmd.exe /c %USERPROFILE%\\.winarchy-perso\\rdv-bulle.ahk"
+
+'@) -replace '\r?\n', $(if ($t -match "`r`n") { "`r`n" } else { "`n" })
+    $t = [regex]::Replace($t, '(?m)^(?=  clock:)', $bloc.Replace('$', '$$'), 1)
+    # Bureaux komorebi : seulement ceux qui ont des fenêtres (+ celui affiché, même vide).
+    if ($t -notmatch 'hide_empty_workspaces: (true|false)') { throw 'ancre bureaux vides absente' }
+    $t = $t.Replace('hide_empty_workspaces: false', 'hide_empty_workspaces: true')
+    # Barre moins chargée (2026-11-25) : CPU, RAM, disques et outils peu utilisés (OCR, QR,
+    # pipette, plan d'alimentation) passent dans la bulle « en plus » (bouton ▾, plus-bulle.ahk),
+    # sur les deux barres. YASB ne sait pas faire déborder ce qui ne tient pas, et ses groupes
+    # repliables cassent l'affichage des widgets cachés au démarrage (CPU/RAM « { ⁝ : »).
+    $t = [regex]::Replace($t, '(?m)^[ \t]*exclude_widgets: [^\n]*\n', '')   # restes du repli
+    $t = $t.Replace('widgets: ["cpu", "memory", "disques"]', 'widgets: ["cpu", "memory"]')
+    $t = $t.Replace('"system", "disques", ', '"plus", ').Replace('"system", ', '"plus", ')
+    $t = $t.Replace('"tool_ocr", "tool_qr", "tool_color", ', '').Replace(', "power_plan"]', ']')
+    if ($t -notmatch '"plus", ') { throw 'ancre bouton en plus absente' }
+    $t = [regex]::Replace($t, '(?ms)^  # Bulle « en plus » \(perso.*?(?=^  clock:)', '')
+    $bloc = (@'
+  # Bulle « en plus » (perso, setup-winarchy.ps1) : CPU, RAM, disques et outils peu utilisés,
+  # dans une bulle AutoHotkey (plus-bulle.ahk) ouverte par ▾, comme le systray.
+  plus:
+    type: "yasb.custom.CustomWidget"
+    options:
+      label: "▾"
+      class_name: "plus-widget"
+      tooltip: true
+      tooltip_label: "CPU, RAM, disques et outils"
+      callbacks:
+        on_left: "exec cmd.exe /c %USERPROFILE%\\.winarchy-perso\\plus-bulle.ahk"
+        on_middle: "do_nothing"
+        on_right: "do_nothing"
 
 '@) -replace '\r?\n', $(if ($t -match "`r`n") { "`r`n" } else { "`n" })
     $t = [regex]::Replace($t, '(?m)^(?=  clock:)', $bloc.Replace('$', '$$'), 1)
@@ -3296,6 +3698,7 @@ if ($Desinstaller) {
     Update-ThemeActif $Komorebi
     Install-Raccourcis $Komorebi
     Set-SurveillanceBarre $Komorebi $false
+    Set-SurveillanceEcrans $Komorebi $false
     Install-ColleClicMilieu $false
     exit 0
 }
@@ -3310,6 +3713,7 @@ Write-Host "==> Winarchy : $Komorebi"
 Set-BarreYasb $Komorebi
 Install-PolicesBarre $Komorebi
 Set-SurveillanceBarre $Komorebi $true
+Set-SurveillanceEcrans $Komorebi $true
 Set-ReglagesWinarchy $Komorebi
 Install-Raccourcis $Komorebi
 Install-ColleClicMilieu $true

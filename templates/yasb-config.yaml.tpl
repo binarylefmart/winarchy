@@ -45,7 +45,7 @@ bars:
     widgets:
       left: ["home", "komorebi_workspaces", "komorebi_active_layout", "taskbar", "extras"]
       center: ["clock", "rdv"]
-      right: ["game_mode", "stay_awake", "media", "ai", "system", "disques", "connections", "volume", "battery", "winarchy_update", "notifications", "systray", "winarchy_menu"]
+      right: ["game_mode", "stay_awake", "media", "ai", "plus", "connections", "volume", "battery", "winarchy_update", "notifications", "systray", "winarchy_menu"]
     layouts:
       left:
         alignment: "left"
@@ -81,7 +81,7 @@ bars:
     widgets:
       left: ["home", "komorebi_workspaces", "taskbar"]
       center: ["clock", "rdv"]
-      right: ["ai", "system", "disques", "connections", "volume", "battery", "notifications", "systray", "winarchy_menu"]
+      right: ["ai", "plus", "connections", "volume", "battery", "notifications", "systray", "winarchy_menu"]
     layouts:
       left:
         alignment: "left"
@@ -184,7 +184,7 @@ widgets:
       label_offline: "komorebi offline"
       label_workspace_btn: "{name}"
       label_default_name: "{index}"
-      hide_empty_workspaces: false
+      hide_empty_workspaces: true
 
   komorebi_active_layout:
     type: "komorebi.active_layout.ActiveLayoutWidget"
@@ -221,8 +221,8 @@ widgets:
 
   # Rendez-vous Outlook (perso, setup-winarchy.ps1) : prochain RDV d'aujourd'hui/demain.
   # Lu par COM dans Outlook classique (démarré sans fenêtre s'il est fermé), voir rdv.ps1.
-  # Survol = détail du prochain RDV, clic = calendrier Outlook, droit = bulle des RDV d'aujourd'hui et
-  # demain (rdv-bulle.ahk), milieu = relecture forcée d'Outlook (exec_custom relance le widget, rdv.ps1
+  # Survol = détail du prochain RDV, clic = calendrier Outlook, droit = bulle des RDV de la
+  # semaine en cours (rdv-bulle.ahk), milieu = relecture forcée d'Outlook (exec_custom relance le widget, rdv.ps1
   # force la lecture quand la souris est au centre de la barre). 5 min avant un RDV, rdv.ps1 ouvre la
   # bulle d'alerte sur tous les écrans.
   rdv:
@@ -244,6 +244,19 @@ widgets:
         on_left: "exec cmd.exe /c start outlook.exe /select outlook:calendar"
         on_middle: "exec_custom"
         on_right: "exec cmd.exe /c %USERPROFILE%\\.winarchy-perso\\rdv-bulle.ahk"
+  # Bulle « en plus » (perso, setup-winarchy.ps1) : CPU, RAM, disques et outils peu utilisés,
+  # dans une bulle AutoHotkey (plus-bulle.ahk) ouverte par ▾, comme le systray.
+  plus:
+    type: "yasb.custom.CustomWidget"
+    options:
+      label: "▾"
+      class_name: "plus-widget"
+      tooltip: true
+      tooltip_label: "CPU, RAM, disques et outils"
+      callbacks:
+        on_left: "exec cmd.exe /c %USERPROFILE%\\.winarchy-perso\\plus-bulle.ahk"
+        on_middle: "do_nothing"
+        on_right: "do_nothing"
   clock:
     type: "yasb.clock.ClockWidget"
     options:
@@ -514,7 +527,7 @@ widgets:
     type: "yasb.grouper.GrouperWidget"
     options:
       class_name: "extras-grouper"
-      widgets: ["tool_region", "tool_clipboard", "recycle_bin", "tool_ocr", "tool_qr", "tool_color", "dnd", "brightness", "power_plan"]
+      widgets: ["tool_region", "tool_clipboard", "recycle_bin", "dnd", "brightness"]
       hide_empty: false
       collapse_options:
         enabled: false
@@ -543,7 +556,7 @@ widgets:
       collapse_options:
         enabled: false
         label_position: "left"
-        collapsed_label: "󰍛"
+        collapsed_label: "▸"
         expanded_label: "◂"
 
   connections:

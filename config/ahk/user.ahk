@@ -951,27 +951,30 @@ PersoSurveilleSurvol() {
 }
 
 ; --- Contrôle à distance : garder les raccourcis Super --------------------------
-; NinjaRemote (ncplayer.exe) pose son propre crochet clavier quand il prend le focus :
-; installé après celui d'AHK, il passe en premier et avale les touches (Super+Shift+2
-; n'arrivait jamais). Dès qu'une de ces fenêtres devient active, on réinstalle le
-; crochet d'AHK pour repasser devant (Windows appelle le dernier installé en premier).
+; Après la parade (Super tenu sur Ninja, focus prêté à une fenêtre invisible), Ninja a
+; transmis à la session distante l'appui de Super (et d'Alt/Ctrl/Shift) mais pas leur
+; relâchement : côté serveur, Super restait enfoncé et on ne pouvait plus écrire. Quand
+; Ninja revient au premier plan, touches relâchées, on lui envoie ces relâchements.
+; (L'ancienne réinstallation du crochet d'AHK ici est retirée : faite pendant que Super
+; était tenu, AHK croyait Super coincé et le copier-coller ne marchait plus.)
+PersoNinjaAReset := 0
 SetTimer(PersoCrochetDevant, 200)
 PersoCrochetDevant() {
-    static dernier := 0
+    global PersoNinjaAReset
+    if !PersoNinjaAReset
+        return
     try hwnd := WinActive('ahk_exe ncplayer.exe')
     catch
         hwnd := 0
-    ; Ninja repose son crochet plus tard (clic dans la session, reconnexion) : tant qu'il est
-    ; au premier plan, on repasse devant toutes les secondes (et tout de suite au focus).
-    static compte := 0
-    if hwnd {
-        compte := (hwnd != dernier) ? 0 : compte + 1
-        if (hwnd != dernier || Mod(compte, 5) = 0)
-            InstallKeybdHook(true, true)
-    }
-    dernier := hwnd
+    if (!hwnd || hwnd != PersoNinjaAReset || GetKeyState('LWin', 'P') || GetKeyState('RWin', 'P'))
+        return
+    PersoNinjaAReset := 0
+    haut := '{LWin up}{RWin up}'
+    for k in ['Alt', 'Ctrl', 'Shift']
+        if !GetKeyState(k, 'P')
+            haut .= '{' k ' up}'
+    SendEvent(haut)
 }
-
 ; Ninja avale les touches ordinaires (journal : Super et Shift arrivent, les autres
 ; jamais, pas même en Raw Input). Parade : on suit Super en Raw Input ; dès qu'il est
 ; tenu sur Ninja, on lui retire le focus au profit d'une fenêtre invisible d'AHK, et la
@@ -980,8 +983,8 @@ PersoCrochetDevant() {
 ; les raccourcis qui visent la fenêtre active (caler, vers l'écran, réduire…) agissent
 ; sur elle. Super toujours tenu : on revole le focus pour la touche suivante. Super
 ; relâché : Ninja reprend le focus si rien d'autre ne l'a pris (Super seul : Flow).
-; Flèches : Ninja avale l'appui même sans le focus ; seul le relâchement arrive, et
-; PersoFlecheAvalee fait alors l'action (caler, vers l'écran, déplacer, focus).
+; Touches ordinaires (lettres, flèches…) : Ninja avale l'appui même sans le focus ; seul
+; le relâchement arrive, et PersoToucheAvalee fait l'action (flèches, Super+W).
 PersoRawInit()
 PersoRawInit() {
     global PersoLeurre := Gui('-Caption +ToolWindow +AlwaysOnTop')
@@ -995,7 +998,7 @@ PersoRawInit() {
 }
 PersoRawClavier(wParam, lParam, *) {
     global PersoNinja, PersoWinTenu, PersoAutreTouche, PersoSuperDepuis, PersoRaccourciFait
-    static alt := false, ctrl := false, maj := false, vus := Map()
+    static vus := Map()
     hdr := 8 + 2 * A_PtrSize                        ; RAWINPUTHEADER
     taille := 0
     DllCall('GetRawInputData', 'Ptr', lParam, 'UInt', 0x10000003, 'Ptr', 0, 'UInt*', &taille, 'UInt', hdr)
@@ -1009,34 +1012,32 @@ PersoRawClavier(wParam, lParam, *) {
     vk := NumGet(buf, hdr + 6, 'UShort')
     if !(vk = 0x5B || vk = 0x5C) {
         haut := NumGet(buf, hdr + 2, 'UShort') & 1
-        if PersoWinTenu
-            try PersoDiag('raw vk=' Format('0x{:02X}', vk) (haut ? ' haut' : ' bas') ' fg=' WinGetProcessName('A'))
+        ; Relâchement de Super manqué : on se recale sur l'état réel.
+        if (PersoWinTenu && !GetKeyState('LWin', 'P') && !GetKeyState('RWin', 'P'))
+            PersoWinTenu := false
         switch vk {
-            case 0x12, 0xA4, 0xA5: alt := !haut
-            case 0x11, 0xA2, 0xA3: ctrl := !haut
-            case 0x10, 0xA0, 0xA1: maj := !haut
+            case 0x12, 0xA4, 0xA5, 0x11, 0xA2, 0xA3, 0x10, 0xA0, 0xA1, 0xE8, 0xFF:
+                return                              ; modificateurs (passent) et touches techniques
         }
-        ; Flèches : Ninja avale l'appui même quand il n'a plus le focus, seul le relâchement
-        ; passe. Relâchement sans appui vu, Super tenu sur Ninja : on fait l'action nous-mêmes.
-        if (vk >= 0x25 && vk <= 0x28) {
-            if !haut
-                vus[vk] := true
-            else {
-                if (PersoNinja && PersoWinTenu && !vus.Has(vk))
-                    SetTimer(PersoFlecheAvalee.Bind(['left', 'up', 'right', 'down'][vk - 0x24], alt, ctrl, maj), -250)
-                if vus.Has(vk)
-                    vus.Delete(vk)
-            }
+        if !haut {
+            vus[vk] := true
+            if PersoWinTenu
+                PersoAutreTouche := true            ; Super n'est plus « seul »
+            return
         }
-        if (PersoWinTenu && vk != 0xE8 && vk != 0xFF)   ; vkE8 : masque envoyé par PersoSuper
-            PersoAutreTouche := true                ; Super n'est plus « seul »
+        ; Ninja avale l'APPUI des touches ordinaires (lettres, flèches…) même sans le focus ;
+        ; seul le relâchement arrive. Relâchement sans appui vu, Super tenu sur Ninja : on
+        ; rejoue la touche (Ninja laisse passer les touches simulées) pour que le raccourci
+        ; normal parte.
+        if (PersoNinja && PersoWinTenu && !vus.Has(vk)) {
+            PersoAutreTouche := true
+            SetTimer(PersoToucheAvalee.Bind(vk, GetKeyState('Alt', 'P'), GetKeyState('Ctrl', 'P'), GetKeyState('Shift', 'P')), -250)
+        }
+        if vus.Has(vk)
+            vus.Delete(vk)
         return
     }
     PersoWinTenu := !(NumGet(buf, hdr + 2, 'UShort') & 1)    ; RI_KEY_BREAK
-    try PersoDiag('raw Win ' (PersoWinTenu ? 'bas' : 'haut') ' ninja=' PersoNinja ' fg=' WinGetProcessName('A'))
-    if PersoWinTenu {                               ; état réel des modificateurs au début de l'appui
-        alt := GetKeyState('Alt', 'P'), ctrl := GetKeyState('Ctrl', 'P'), maj := GetKeyState('Shift', 'P')
-    }
     if (PersoWinTenu && !PersoNinja) {
         PersoAutreTouche := false, PersoSuperDepuis := A_TickCount, PersoRaccourciFait := false
         try PersoNinja := WinActive('ahk_exe ncplayer.exe')
@@ -1055,8 +1056,8 @@ PersoVole() {
 ; Évalué par AHK avant chaque raccourci perso : rend le premier plan à Ninja.
 PersoAvantRaccourci() {
     global PersoLeurre, PersoNinja, PersoDernierRacc
-    if (A_ThisHotkey ~= 'i)(Left|Right|Up|Down)$')
-        PersoDernierRacc := A_TickCount             ; le raccourci normal est passé : pas de doublon
+    if !(A_ThisHotkey ~= 'i)LWin')
+        PersoDernierRacc := A_TickCount             ; un raccourci est passé : pas de doublon
     if (PersoNinja && !(A_ThisHotkey ~= 'i)LWin') && WinActive('ahk_id ' PersoLeurre.Hwnd)) {
         global PersoRaccourciFait := true, PersoDernierRacc := A_TickCount
         DllCall('SetForegroundWindow', 'Ptr', PersoNinja)
@@ -1065,20 +1066,32 @@ PersoAvantRaccourci() {
     }
     return true
 }
-PersoFlecheAvalee(dir, alt, ctrl, maj) {
-    global PersoNinja, PersoLeurre, PersoRaccourciFait
-    global PersoDernierRacc
-    ; Un raccourci est déjà parti pour cette flèche (perso ou winarchy) : rien à faire.
+; Appui avalé par Ninja (seul le relâchement est arrivé) : action faite directement, sans
+; rejouer la touche (Ninja avale aussi les touches rejouées tant que Super est tenu).
+PersoToucheAvalee(vk, alt, ctrl, maj) {
+    global PersoNinja, PersoLeurre, PersoDernierRacc, PersoRaccourciFait
+    ; Un raccourci est déjà parti pour cette touche (l'appui était passé jusqu'à AHK) : rien.
     if (A_TickCount - PersoDernierRacc < 600)
         return
-    if (A_PriorHotkey ~= 'i)(Left|Right|Up|Down)$' && A_TimeSincePriorHotkey != '' && A_TimeSincePriorHotkey < 600)
+    nom := GetKeyName(Format('vk{:02X}', vk))
+    if (nom != '' && A_TimeSincePriorHotkey != '' && A_TimeSincePriorHotkey < 600
+        && SubStr(A_PriorHotkey, -StrLen(nom)) = nom)
         return
     if !PersoNinja || !WinExist('ahk_id ' PersoNinja)
         return
+    dir := (vk >= 0x25 && vk <= 0x28) ? ['left', 'up', 'right', 'down'][vk - 0x24] : ''
+    if (dir = '' && !(vk = 0x57 && !alt && !ctrl && !maj))   ; seulement flèches et Super+W
+        return
+    ; Copie locale : Super relâché entre-temps remet PersoNinja à 0 (PersoRendNinja).
+    h := PersoNinja
     PersoRaccourciFait := true, PersoDernierRacc := A_TickCount
-    DllCall('SetForegroundWindow', 'Ptr', PersoNinja)
+    DllCall('SetForegroundWindow', 'Ptr', h)
     PersoLeurre.Hide()
     Sleep(30)
+    if (vk = 0x57) {
+        try PostMessage(0x0010, 0, 0, , 'ahk_id ' h)     ; Super+W : fermer Ninja
+        return
+    }
     if ctrl
         PersoVersEcran(dir)
     else if alt
@@ -1088,9 +1101,6 @@ PersoFlecheAvalee(dir, alt, ctrl, maj) {
     else
         PersoKomorebic('focus ' dir)
     SetTimer(PersoRevole, -300)
-}
-PersoDiag(m) {
-    try FileAppend(FormatTime(, 'HH:mm:ss') '.' A_MSec '  ' m '`n', A_Temp '\winarchy-perso-ninja.log', 'UTF-8')
 }
 PersoRevole() {
     global PersoNinja, PersoWinTenu
@@ -1102,6 +1112,7 @@ PersoRendNinja() {
     if (PersoWinTenu || !PersoNinja)
         return
     h := PersoNinja
+    global PersoNinjaAReset := h                    ; relâchements à renvoyer à Ninja (PersoCrochetDevant)
     encore := WinActive('ahk_id ' PersoLeurre.Hwnd)
     PersoNinja := 0
     PersoLeurre.Hide()
@@ -1120,9 +1131,10 @@ PersoRendNinja() {
 ; désigner la fenêtre invisible au moment où le raccourci s'exécute).
 #w:: {
     global PersoNinja
-    try PersoDiag('#w ninja=' PersoNinja ' fg=' WinGetProcessName('A'))
-    if (PersoNinja && WinExist('ahk_id ' PersoNinja))
-        PostMessage(0x0010, 0, 0, , 'ahk_id ' PersoNinja)   ; WM_CLOSE
+    h := PersoNinja
+    if (h && WinExist('ahk_id ' h)) {
+        try PostMessage(0x0010, 0, 0, , 'ahk_id ' h)   ; WM_CLOSE
+    }
     else
         CloseWindow()
 }

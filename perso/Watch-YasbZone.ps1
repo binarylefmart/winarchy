@@ -58,9 +58,44 @@ public static System.Collections.Generic.List<string> SansZone() {
 }
 [DllImport("user32.dll")] public static extern System.IntPtr SetThreadDpiAwarenessContext(System.IntPtr c);
 [DllImport("shcore.dll")] public static extern int GetDpiForMonitor(System.IntPtr h, int type, out uint x, out uint y);
-// « \\.\DISPLAYn|largeur logique » pour chaque écran (pixels réels × 96 / DPI effectif).
+// Nom d'écran vu par Qt (donc YASB) : nom « convivial » EDID (ex. PGM340), sinon \\.\DISPLAYn
+// (écrans internes sans nom). Lu comme Qt, par QueryDisplayConfig.
+// Pack = 4 : un LUID n'est aligné que sur 4 octets (72 octets par chemin, comme en C).
+[StructLayout(LayoutKind.Sequential, Pack = 4)] public struct PATH {
+  public long sAdapter; public uint sId, sMode, sFlags;
+  public long tAdapter; public uint tId, tMode, tTech, tRot, tScale, tRefN, tRefD, tScan; public int tDispo; public uint tFlags;
+  public uint flags; }
+[StructLayout(LayoutKind.Sequential, Size = 64)] public struct MODE { public uint type; }
+[StructLayout(LayoutKind.Sequential, Pack = 4, CharSet = CharSet.Unicode)] public struct SOURCE {
+  public uint type, size; public long adapter; public uint id;
+  [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)] public string gdi; }
+[StructLayout(LayoutKind.Sequential, Pack = 4, CharSet = CharSet.Unicode)] public struct TARGET {
+  public uint type, size; public long adapter; public uint id;
+  public uint flags, tech; public ushort manuf, produit; public uint connecteur;
+  [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 64)] public string nom;
+  [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)] public string chemin; }
+[DllImport("user32.dll")] public static extern int GetDisplayConfigBufferSizes(uint f, out uint np, out uint nm);
+[DllImport("user32.dll")] public static extern int QueryDisplayConfig(uint f, ref uint np, [Out] PATH[] p, ref uint nm, [Out] MODE[] m, System.IntPtr t);
+[DllImport("user32.dll")] public static extern int DisplayConfigGetDeviceInfo(ref SOURCE s);
+[DllImport("user32.dll")] public static extern int DisplayConfigGetDeviceInfo(ref TARGET t);
+public static System.Collections.Generic.Dictionary<string, string> NomsQt() {
+  var d = new System.Collections.Generic.Dictionary<string, string>(System.StringComparer.OrdinalIgnoreCase);
+  uint np, nm;
+  if (GetDisplayConfigBufferSizes(2, out np, out nm) != 0) return d;   // QDC_ONLY_ACTIVE_PATHS
+  var p = new PATH[np]; var m = new MODE[nm];
+  if (QueryDisplayConfig(2, ref np, p, ref nm, m, System.IntPtr.Zero) != 0) return d;
+  for (int i = 0; i < np; i++) {
+    var s = new SOURCE(); s.type = 1; s.size = (uint)Marshal.SizeOf(typeof(SOURCE)); s.adapter = p[i].sAdapter; s.id = p[i].sId;
+    var t = new TARGET(); t.type = 2; t.size = (uint)Marshal.SizeOf(typeof(TARGET)); t.adapter = p[i].tAdapter; t.id = p[i].tId;
+    if (DisplayConfigGetDeviceInfo(ref s) != 0) continue;
+    if (DisplayConfigGetDeviceInfo(ref t) == 0 && !string.IsNullOrEmpty(t.nom) && !d.ContainsKey(s.gdi)) d[s.gdi] = t.nom;
+  }
+  return d;
+}
+// « nom Qt|largeur logique » pour chaque écran (pixels réels × 96 / DPI effectif).
 public static System.Collections.Generic.List<string> Largeurs() {
   var l = new System.Collections.Generic.List<string>();
+  var noms = NomsQt();
   var avant = SetThreadDpiAwarenessContext(new System.IntPtr(-4));   // per-monitor v2 : vrais pixels et DPI
   try {
     EnumDisplayMonitors(System.IntPtr.Zero, System.IntPtr.Zero, (System.IntPtr h, System.IntPtr hdc, ref RECT r, System.IntPtr d) => {
@@ -68,7 +103,8 @@ public static System.Collections.Generic.List<string> Largeurs() {
       uint dx, dy;
       if (GetMonitorInfo(h, ref mi)) {
         if (GetDpiForMonitor(h, 0, out dx, out dy) != 0 || dx == 0) dx = 96;
-        l.Add(mi.szDevice + "|" + ((mi.rcMonitor.Right - mi.rcMonitor.Left) * 96 / (int)dx));
+        string nom; if (!noms.TryGetValue(mi.szDevice, out nom)) nom = mi.szDevice;
+        l.Add(nom + "|" + ((mi.rcMonitor.Right - mi.rcMonitor.Left) * 96 / (int)dx));
       }
       return true; }, System.IntPtr.Zero);
   } finally { if (avant != System.IntPtr.Zero) SetThreadDpiAwarenessContext(avant); }
@@ -94,12 +130,12 @@ function Restart-Yasb {
     if (Test-Path $komorebic) { & $komorebic retile *> $null }
 }
 
-# Écrans voulus pour laptop-bar et wide-bar, au format YAML : ["\\\\.\\DISPLAY1", ...] ou ["aucun"].
+# Écrans voulus pour laptop-bar et wide-bar, au format YAML : ["PGM340", "\\\\.\\DISPLAY1", ...] ou ["aucun"].
 function Get-EcransBarres {
     $etroits = @(); $larges = @()
     foreach ($e in [PersoWinarchy.Ecrans]::Largeurs()) {
         $nom, $l = $e.Split('|'); $l = [int]$l
-        $yaml = '"' + $nom.Replace('\', '\\') + '"'
+        $yaml = '"' + $nom.Replace('\', '\\').Replace('"', '\"') + '"'
         if ($l -lt $Etroit) { $etroits += $yaml } elseif ($l -ge $Large) { $larges += $yaml }
     }
     $f = { param($a) if ($a.Count) { '[' + ($a -join ', ') + ']' } else { '["aucun"]' } }

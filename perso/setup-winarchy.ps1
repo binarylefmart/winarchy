@@ -576,6 +576,8 @@ if WinExist("PlusBulle ahk_class AutoHotkeyGUI") {
 if FermeeRecemment()
     ExitApp
 
+Etat("▾")                 ; flèche du widget tout de suite (relue par YASB) ; ▸ à la fermeture
+OnExit((*) => Etat("▸"))
 CoordMode "Mouse", "Screen"
 MouseGetPos &SourisX, &SourisY
 PrecCpu := TempsCpu()
@@ -625,8 +627,6 @@ Cellule(0xF0322, "Ce PC", "Ce PC", Lancer.Bind("explorer.exe shell:MyComputerFol
 
 MajPerf()
 Afficher()
-Etat("▾")
-OnExit((*) => Etat("▸"))
 SetTimer(MajPerf, 2000)
 SetTimer(ClicDehors, 50)
 OnMessage(0x200, Survol)   ; WM_MOUSEMOVE : info-bulle
@@ -3395,7 +3395,7 @@ function Edit-ModeleYasb([string]$t) {
       class_name: "plus-widget"
       exec_options:
         run_cmd: 'type %USERPROFILE%\.winarchy-perso\plus-bulle.etat'
-        run_interval: 1000
+        run_interval: 500
         return_format: "string"
         use_shell: true
       tooltip: true

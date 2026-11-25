@@ -257,7 +257,7 @@ widgets:
       class_name: "plus-widget"
       exec_options:
         run_cmd: 'type %USERPROFILE%\.winarchy-perso\plus-bulle.etat'
-        run_interval: 1000
+        run_interval: 500
         return_format: "string"
         use_shell: true
       tooltip: true

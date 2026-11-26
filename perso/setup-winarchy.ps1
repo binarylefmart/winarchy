@@ -32,8 +32,9 @@
 
   Raccourcis (ils passent devant ceux de Winarchy) :
         Super+Backspace            Claude Code (Foxis)
-        Super+Shift+Backspace      Claude Desktop (ouvre / affiche / replie ; Super+Shift+A ne fait plus rien)
-        Super+Ctrl+Alt+Shift+Entrée  Claude Desktop perso (2e instance, compte perso ; ouvre / affiche / replie)
+        Super+Shift+Backspace      Claude Code (perso)
+        Super+Shift+Alt+Backspace  Claude Desktop pro (ouvre / affiche / replie ; Super+Shift+A ne fait plus rien)
+        Super+Shift+Alt+Entrée     Claude Desktop perso (2e instance, compte perso ; ouvre / affiche / replie)
         Super+A / Super+Alt+Tab    Exposé (Vue des tâches de Windows)
         Super+O                    Outlook classique (Obsidian n'a plus de raccourci ; Super+Shift+O ne fait plus rien)
         Super+M                    Deezer
@@ -1675,9 +1676,10 @@ InstallMouseHook()
 #HotIf PersoAvantRaccourci()   ; toujours vrai (passe devant winarchy.ahk) ; rend le focus à Ninja si besoin
 ; --- Perso : applis -----------------------------------------------------------
 #Backspace::PersoIci(), PersoClaude('foxis')                  ; Claude Code (Foxis)
-#+Backspace::PersoIci(), PersoClaudeBascule()                 ; Claude Desktop : ouvre / affiche / replie
+#+Backspace::PersoIci(), PersoClaude('perso')                 ; Claude Code (perso)
+#!+Backspace::PersoIci(), PersoClaudeBascule()                ; Claude Desktop pro : ouvre / affiche / replie
 #+a::return                                       ; Supprimé (webapp claude.ai de Winarchy)
-#^!+Enter::PersoIci(), PersoClaudePerso()                     ; Claude Desktop perso (2e instance, compte perso)
+#!+Enter::PersoIci(), PersoClaudePerso()                      ; Claude Desktop perso (2e instance, compte perso)
 #a::PersoExpose()                                 ; Exposé (Vue des tâches)
 #!Tab::PersoExpose()                              ; Exposé (Vue des tâches)
 #o::PersoIci(), PersoOutlook()                                ; Outlook (remplace Obsidian de Winarchy)
@@ -2485,10 +2487,10 @@ PersoClaudeOuvre(hwnd, lancer) {
         Run(lancer)
 }
 
-; Super+Shift+Backspace : instance pro (l'instance perso est ignorée).
+; Super+Shift+Alt+Backspace : instance pro (l'instance perso est ignorée).
 PersoClaudeBascule() => PersoClaudeOuvre(PersoClaudeFenetre(false), 'explorer.exe shell:AppsFolder\Claude_pzs8sxrjxfjjc!Claude')
 
-; Super+Ctrl+Alt+Shift+Entrée : instance perso.
+; Super+Shift+Alt+Entrée : instance perso.
 PersoClaudePerso() => PersoClaudeOuvre(PersoClaudeFenetre(true)
     , '"' EnvGet('LOCALAPPDATA') '\Microsoft\WindowsApps\claude-desktop.exe" --user-data-dir="' EnvGet('APPDATA') '\Claude-perso"')
 
@@ -2748,7 +2750,9 @@ PersoToucheAvalee(vk, alt, ctrl, maj) {
     if !PersoNinja || !WinExist('ahk_id ' PersoNinja)
         return
     dir := (vk >= 0x25 && vk <= 0x28) ? ['left', 'up', 'right', 'down'][vk - 0x24] : ''
-    if (dir = '' && !(vk = 0x57 && !alt && !ctrl && !maj))   ; seulement flèches et Super+W
+    ; Chiffres : 1..9 → workspace 0..8, 0 → workspace 9 (comme winarchy.ahk).
+    ws := (vk >= 0x30 && vk <= 0x39) ? (vk = 0x30 ? 9 : vk - 0x31) : -1
+    if (dir = '' && ws < 0 && !(vk = 0x57 && !alt && !ctrl && !maj))   ; flèches, chiffres et Super+W
         return
     ; Copie locale : Super relâché entre-temps remet PersoNinja à 0 (PersoRendNinja).
     h := PersoNinja
@@ -2758,6 +2762,20 @@ PersoToucheAvalee(vk, alt, ctrl, maj) {
     Sleep(30)
     if (vk = 0x57) {
         try PostMessage(0x0010, 0, 0, , 'ahk_id ' h)     ; Super+W : fermer Ninja
+        return
+    }
+    if (ws >= 0) {
+        if (alt && ws <= 3)                         ; Super+Alt(+Shift)+N : écran N
+            PersoEcran(ws + 1, maj ? 'move' : 'focus')
+        else if alt
+            return
+        else if ctrl
+            PersoKomorebic('send-to-workspace ' ws)  ; Super+Ctrl+N : envoyer, rester ici
+        else if maj
+            PersoKomorebic('move-to-workspace ' ws)  ; Super+Shift+N : déplacer Ninja et le suivre
+        else
+            FocusWorkspace(ws)                      ; Super+N : aller au workspace N
+        SetTimer(PersoRevole, -300)
         return
     }
     if ctrl
@@ -2927,6 +2945,30 @@ function Set-SurveillanceEcrans([string]$Root, [bool]$active) {
     Register-ScheduledTask -TaskName $nom -TaskPath $dossier -Action $action -Trigger $trigger -Settings $reglages -Principal $principal -Force | Out-Null
     Start-ScheduledTask -TaskName $nom -TaskPath $dossier
     Ok 'Surveillance des écrans active (tâche \Winarchy\ecrans)'
+}
+
+# Surveillance du fond (perso\Watch-Fond.ps1) : l'écran de verrouillage suit le fond d'écran,
+# quel que soit le moyen de le changer (winarchy background, theme set, Paramètres Windows).
+function Set-SurveillanceFond([string]$Root, [bool]$active) {
+    $nom = 'fond'; $dossier = '\Winarchy\'
+    if (-not $active) {
+        if (Get-ScheduledTask -TaskName $nom -TaskPath $dossier -ErrorAction SilentlyContinue) {
+            Stop-ScheduledTask -TaskName $nom -TaskPath $dossier -ErrorAction SilentlyContinue
+            Unregister-ScheduledTask -TaskName $nom -TaskPath $dossier -Confirm:$false
+            Ok 'Surveillance du fond d''écran retirée'
+        }
+        return
+    }
+    $script = Join-Path $Root 'perso\Watch-Fond.ps1'
+    if (-not (Test-Path $script)) { Warn "Surveillance du fond non installée : $script introuvable"; return }
+    $action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$script`""
+    $trigger = New-ScheduledTaskTrigger -AtLogOn -User "$env:USERDOMAIN\$env:USERNAME"
+    $trigger.Delay = 'PT30S'
+    $reglages = New-ScheduledTaskSettingsSet -ExecutionTimeLimit ([TimeSpan]::Zero) -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -MultipleInstances IgnoreNew
+    $principal = New-ScheduledTaskPrincipal -UserId "$env:USERDOMAIN\$env:USERNAME" -LogonType Interactive -RunLevel Limited
+    Register-ScheduledTask -TaskName $nom -TaskPath $dossier -Action $action -Trigger $trigger -Settings $reglages -Principal $principal -Force | Out-Null
+    Start-ScheduledTask -TaskName $nom -TaskPath $dossier
+    Ok 'Écran de verrouillage synchronisé avec le fond (tâche \Winarchy\fond)'
 }
 
 function Get-ThemeActif([string]$Root) {
@@ -3829,6 +3871,7 @@ if ($Desinstaller) {
     Install-Raccourcis $Komorebi
     Set-SurveillanceBarre $Komorebi $false
     Set-SurveillanceEcrans $Komorebi $false
+    Set-SurveillanceFond $Komorebi $false
     Install-ColleClicMilieu $false
     exit 0
 }
@@ -3844,6 +3887,7 @@ Set-BarreYasb $Komorebi
 Install-PolicesBarre $Komorebi
 Set-SurveillanceBarre $Komorebi $true
 Set-SurveillanceEcrans $Komorebi $true
+Set-SurveillanceFond $Komorebi $true
 Set-ReglagesWinarchy $Komorebi
 Install-Raccourcis $Komorebi
 Install-ColleClicMilieu $true
@@ -3855,5 +3899,5 @@ Write-Host '   - Super seul ouvre le lanceur d''applis, Super+Espace le menu Dé
 Write-Host '   - Super+Q ouvre le menu Winarchy (Super+Alt+Espace aussi)'
 Write-Host '   - Super+K liste tes raccourcis sous « Perso : … »'
 Write-Host '   - Connexion, une fois par compte (réglages copiés sans jetons) :'
-Write-Host '       Super+Backspace puis /login (Foxis), Super+Shift+Backspace puis /login (perso)'
+Write-Host '       Super+Backspace puis /login (Foxis), Super+Shift+Backspace puis /login (perso) ; Claude Desktop : Super+Shift+Alt+Backspace (pro), Super+Shift+Alt+Entrée (perso)'
 Write-Host '       $env:GH_CONFIG_DIR="$HOME\.config\gh-foxis"; gh auth login   (idem avec gh-perso)'

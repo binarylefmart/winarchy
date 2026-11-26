@@ -8,9 +8,10 @@ InstallMouseHook()
 #HotIf PersoAvantRaccourci()   ; toujours vrai (passe devant winarchy.ahk) ; rend le focus à Ninja si besoin
 ; --- Perso : applis -----------------------------------------------------------
 #Backspace::PersoIci(), PersoClaude('foxis')                  ; Claude Code (Foxis)
-#+Backspace::PersoIci(), PersoClaudeBascule()                 ; Claude Desktop : ouvre / affiche / replie
+#+Backspace::PersoIci(), PersoClaude('perso')                 ; Claude Code (perso)
+#!+Backspace::PersoIci(), PersoClaudeBascule()                ; Claude Desktop pro : ouvre / affiche / replie
 #+a::return                                       ; Supprimé (webapp claude.ai de Winarchy)
-#^!+Enter::PersoIci(), PersoClaudePerso()                     ; Claude Desktop perso (2e instance, compte perso)
+#!+Enter::PersoIci(), PersoClaudePerso()                      ; Claude Desktop perso (2e instance, compte perso)
 #a::PersoExpose()                                 ; Exposé (Vue des tâches)
 #!Tab::PersoExpose()                              ; Exposé (Vue des tâches)
 #o::PersoIci(), PersoOutlook()                                ; Outlook (remplace Obsidian de Winarchy)
@@ -818,10 +819,10 @@ PersoClaudeOuvre(hwnd, lancer) {
         Run(lancer)
 }
 
-; Super+Shift+Backspace : instance pro (l'instance perso est ignorée).
+; Super+Shift+Alt+Backspace : instance pro (l'instance perso est ignorée).
 PersoClaudeBascule() => PersoClaudeOuvre(PersoClaudeFenetre(false), 'explorer.exe shell:AppsFolder\Claude_pzs8sxrjxfjjc!Claude')
 
-; Super+Ctrl+Alt+Shift+Entrée : instance perso.
+; Super+Shift+Alt+Entrée : instance perso.
 PersoClaudePerso() => PersoClaudeOuvre(PersoClaudeFenetre(true)
     , '"' EnvGet('LOCALAPPDATA') '\Microsoft\WindowsApps\claude-desktop.exe" --user-data-dir="' EnvGet('APPDATA') '\Claude-perso"')
 
@@ -1081,7 +1082,9 @@ PersoToucheAvalee(vk, alt, ctrl, maj) {
     if !PersoNinja || !WinExist('ahk_id ' PersoNinja)
         return
     dir := (vk >= 0x25 && vk <= 0x28) ? ['left', 'up', 'right', 'down'][vk - 0x24] : ''
-    if (dir = '' && !(vk = 0x57 && !alt && !ctrl && !maj))   ; seulement flèches et Super+W
+    ; Chiffres : 1..9 → workspace 0..8, 0 → workspace 9 (comme winarchy.ahk).
+    ws := (vk >= 0x30 && vk <= 0x39) ? (vk = 0x30 ? 9 : vk - 0x31) : -1
+    if (dir = '' && ws < 0 && !(vk = 0x57 && !alt && !ctrl && !maj))   ; flèches, chiffres et Super+W
         return
     ; Copie locale : Super relâché entre-temps remet PersoNinja à 0 (PersoRendNinja).
     h := PersoNinja
@@ -1091,6 +1094,20 @@ PersoToucheAvalee(vk, alt, ctrl, maj) {
     Sleep(30)
     if (vk = 0x57) {
         try PostMessage(0x0010, 0, 0, , 'ahk_id ' h)     ; Super+W : fermer Ninja
+        return
+    }
+    if (ws >= 0) {
+        if (alt && ws <= 3)                         ; Super+Alt(+Shift)+N : écran N
+            PersoEcran(ws + 1, maj ? 'move' : 'focus')
+        else if alt
+            return
+        else if ctrl
+            PersoKomorebic('send-to-workspace ' ws)  ; Super+Ctrl+N : envoyer, rester ici
+        else if maj
+            PersoKomorebic('move-to-workspace ' ws)  ; Super+Shift+N : déplacer Ninja et le suivre
+        else
+            FocusWorkspace(ws)                      ; Super+N : aller au workspace N
+        SetTimer(PersoRevole, -300)
         return
     }
     if ctrl
